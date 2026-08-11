@@ -7,6 +7,8 @@
 - Made device fallback require an explicit choice when several inactive devices are available.
 - Added guided `spotify-mcp init` onboarding with app-change reauthorization and live verification.
 - Added multi-version GitHub CI and Dependabot coverage.
+- Prevented repeated result events and stale playback-context responses from duplicating or
+  flickering the inline Spotify results UI.
 
 ## 0.2.2
 

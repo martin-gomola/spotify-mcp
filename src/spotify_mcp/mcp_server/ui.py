@@ -120,8 +120,9 @@ def create_results_apps() -> Apps:
         name="spotify_render_results",
         title="Show Spotify results",
         description=(
-            "Render a final, display-ready list of Spotify entities. Call data tools first, "
-            "then pass only the results the user should see."
+            "Render a final, display-ready list of Spotify entities exactly once per response. "
+            "Call data tools first, then pass only the final results the user should see; do not "
+            "call this tool again in the same response."
         ),
         annotations=ToolAnnotations(
             read_only_hint=True,

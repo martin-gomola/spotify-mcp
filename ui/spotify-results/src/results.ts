@@ -80,6 +80,19 @@ function isResultsPayload(value: unknown): value is SpotifyResultsPayload {
   );
 }
 
+function payloadKey(payload: SpotifyResultsPayload): string {
+  return JSON.stringify([
+    payload.title,
+    payload.items.map((item) => [
+      item.name,
+      item.spotify_url,
+      item.subtitle ?? null,
+      item.kind,
+      item.reason ?? null,
+    ]),
+  ]);
+}
+
 function toolErrorMessage(result: ToolCallResult): string {
   const text = result.content?.find((item) => item.type === "text" && item.text)?.text;
   return text || "Spotify could not complete this action.";
@@ -110,6 +123,9 @@ export class SpotifyResultsView {
   #cards: CardView[] = [];
   #selectedDeviceId: string | null = null;
   #inFlight = false;
+  #renderRevision = 0;
+  #lastPayloadKey: string | null = null;
+  #lastRender: Promise<void> | null = null;
 
   constructor(bridge: ResultsBridge) {
     this.#bridge = bridge;
@@ -120,14 +136,21 @@ export class SpotifyResultsView {
     this.#feedback = document.querySelector<HTMLElement>("#feedback")!;
   }
 
-  async render(payload: unknown): Promise<void> {
-    if (!isResultsPayload(payload)) return;
+  render(payload: unknown): Promise<void> {
+    if (!isResultsPayload(payload)) return Promise.resolve();
+    const nextPayloadKey = payloadKey(payload);
+    if (nextPayloadKey === this.#lastPayloadKey) {
+      return this.#lastRender ?? Promise.resolve();
+    }
+    this.#lastPayloadKey = nextPayloadKey;
+    const revision = ++this.#renderRevision;
     this.#title.textContent = payload.title;
     this.#summary.textContent = `${payload.items.length} result${payload.items.length === 1 ? "" : "s"}`;
     this.#feedback.replaceChildren();
     this.#results.replaceChildren();
     this.#cards = payload.items.map((item) => this.#renderCard(item));
-    await this.#loadContext();
+    this.#lastRender = this.#loadContext(revision);
+    return this.#lastRender;
   }
 
   #renderCard(item: SpotifyResultItem): CardView {
@@ -176,10 +199,11 @@ export class SpotifyResultsView {
     return { element: card, item, playButton, status };
   }
 
-  async #loadContext(): Promise<void> {
+  async #loadContext(revision: number): Promise<void> {
     this.#device.textContent = "Loading devices...";
     try {
       const result = await this.#bridge.callServerTool("spotify_results_context", {});
+      if (revision !== this.#renderRevision) return;
       if (result.isError || !isObject(result.structuredContent)) {
         this.#setFeedback(toolErrorMessage(result), "error");
         this.#device.textContent = "Playback unavailable";
@@ -188,6 +212,7 @@ export class SpotifyResultsView {
       const context = result.structuredContent as unknown as ResultsContext;
       this.#applyContext(context);
     } catch {
+      if (revision !== this.#renderRevision) return;
       this.#device.textContent = "Playback unavailable";
       this.#setFeedback("Spotify playback controls are unavailable in this client.", "error");
     }
@@ -197,6 +222,7 @@ export class SpotifyResultsView {
     const usable = context.devices.filter((device) => Boolean(device.id) && !device.is_restricted);
     this.#selectedDeviceId = context.selected_device_id || null;
     this.#device.replaceChildren();
+    this.#setFeedback("");
 
     if (!context.has_usable_devices || usable.length === 0) {
       this.#device.textContent = "No controllable device";

@@ -86,6 +86,17 @@ function bridgeWith(...results: ToolCallResult[]): ResultsBridge & {
   };
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   renderShell();
 });
@@ -197,5 +208,51 @@ describe("SpotifyResultsView", () => {
     ));
     expect(cards[0]!.getAttribute("aria-current")).toBe("true");
     expect(bridge.callServerTool).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores repeated delivery of the same result payload", async () => {
+    const pendingContext = deferred<ToolCallResult>();
+    const bridge: ResultsBridge & { callServerTool: ReturnType<typeof vi.fn> } = {
+      callServerTool: vi.fn(() => pendingContext.promise),
+      openLink: vi.fn(async () => ({})),
+    };
+    const view = new SpotifyResultsView(bridge);
+
+    const firstRender = view.render(TRACKS);
+    const repeatedRender = view.render(structuredClone(TRACKS));
+
+    expect(document.querySelectorAll(".card")).toHaveLength(3);
+    expect(bridge.callServerTool).toHaveBeenCalledTimes(1);
+    pendingContext.resolve(contextResult());
+    await Promise.all([firstRender, repeatedRender]);
+  });
+
+  it("does not let an older context error overwrite newer results", async () => {
+    const firstContext = deferred<ToolCallResult>();
+    const secondContext = deferred<ToolCallResult>();
+    const bridge: ResultsBridge & { callServerTool: ReturnType<typeof vi.fn> } = {
+      callServerTool: vi
+        .fn()
+        .mockReturnValueOnce(firstContext.promise)
+        .mockReturnValueOnce(secondContext.promise),
+      openLink: vi.fn(async () => ({})),
+    };
+    const view = new SpotifyResultsView(bridge);
+    const newerPayload: SpotifyResultsPayload = {
+      title: "Newer results",
+      items: [TRACKS.items[1]!],
+    };
+
+    const olderRender = view.render(TRACKS);
+    const newerRender = view.render(newerPayload);
+    secondContext.resolve(contextResult());
+    await newerRender;
+    firstContext.resolve({ isError: true, content: [{ type: "text", text: "Stale error" }] });
+    await olderRender;
+
+    expect(document.querySelector("#title")?.textContent).toBe("Newer results");
+    expect(document.querySelectorAll(".card")).toHaveLength(1);
+    expect(document.querySelector("#device")?.textContent).toBe("Play on Desk");
+    expect(document.querySelector("#feedback")?.textContent).toBe("");
   });
 });

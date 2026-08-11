@@ -63,6 +63,7 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
         }
         assert tools["spotify_results_context"].annotations.read_only_hint is True
         assert tools["spotify_results_play"].annotations.read_only_hint is False
+        assert "exactly once" in (tool.description or "")
         assert tool.output_schema is not None
         assert resources[RESULTS_UI_URI].mime_type == "text/html;profile=mcp-app"
         assert resources[RESULTS_UI_URI].meta == {
