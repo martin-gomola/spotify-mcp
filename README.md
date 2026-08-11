@@ -43,6 +43,16 @@ The bundled Codex plugin starts the server directly through
 `~/dev/spotify-mcp` unless `SPOTIFY_MCP_REPO` points somewhere else; run `make auth` once before
 enabling it.
 
+Install the public Git-backed marketplace and plugin with:
+
+```bash
+codex plugin marketplace add martin-gomola/spotify-mcp --ref main
+codex plugin add spotify-mcp@spotify-mcp
+```
+
+Codex can then refresh the marketplace from `main` with
+`codex plugin marketplace upgrade spotify-mcp`.
+
 ## Safety model
 
 - OAuth tokens and local DJ state use OS-appropriate private data directories, not the checkout.
