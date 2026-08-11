@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
-    "@types/node": "24.10.4",
+    "@types/node": "26.2.0",
     "jsdom": "27.4.0",
     "typescript": "7.0.2",
     "vite": "8.2.1",
