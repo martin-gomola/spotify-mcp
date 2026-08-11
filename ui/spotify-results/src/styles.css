@@ -44,7 +44,8 @@ html {
 body {
   width: min(100%, 760px);
   margin: 0 auto;
-  padding: clamp(12px, 2.4vw, 20px);
+  padding-block: clamp(14px, 2.4vw, 20px);
+  padding-inline: clamp(20px, 3.2vw, 28px);
   background: transparent;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -300,6 +301,19 @@ select {
   content: "";
 }
 
+.play.is-pause::before {
+  width: 10px;
+  height: 13px;
+  margin-left: 0;
+  border: 0;
+  background: linear-gradient(
+    to right,
+    currentColor 0 3px,
+    transparent 3px 7px,
+    currentColor 7px 10px
+  );
+}
+
 .play:active:not(:disabled),
 .open-link:active {
   opacity: 0.78;
@@ -347,7 +361,8 @@ select:focus-visible {
 
 @media (max-width: 600px) {
   body {
-    padding: 12px;
+    padding-block: 12px;
+    padding-inline: 16px;
   }
 
   .header {

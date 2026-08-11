@@ -16,10 +16,11 @@ from spotify_mcp.application.playback import (
     Device,
     NowPlaying,
     ObservedPlaybackResult,
+    PlaybackResult,
     PlaybackService,
 )
 from spotify_mcp.domain.links import SpotifyEntityType, spotify_uri, spotify_web_url
-from spotify_mcp.mcp_server.annotations import READ_ONLY, WRITE
+from spotify_mcp.mcp_server.annotations import IDEMPOTENT_WRITE, READ_ONLY, WRITE
 from spotify_mcp.mcp_server.context import AppContext
 
 RESULTS_UI_URI = "ui://spotify/results/v1.html"
@@ -181,6 +182,20 @@ def create_results_apps() -> Apps:
         return await PlaybackService(ctx.request_context.lifespan_context.spotify).play_and_observe(
             uri=spotify_uri(entity_type, entity_id),
             device_id=device_id,
+        )
+
+    @apps.tool(
+        resource_uri=RESULTS_UI_URI,
+        visibility=("app",),
+        name="spotify_results_pause",
+        title="Pause Spotify result playback",
+        description="Pause Spotify playback on the device selected by the inline results UI.",
+        annotations=IDEMPOTENT_WRITE,
+        structured_output=True,
+    )
+    async def results_pause(ctx: Context[AppContext], device_id: str) -> PlaybackResult:
+        return await PlaybackService(ctx.request_context.lifespan_context.spotify).pause(
+            device_id=device_id
         )
 
     return apps

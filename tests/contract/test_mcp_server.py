@@ -71,6 +71,7 @@ PUBLIC_TOOLS = {
 
 APP_ONLY_TOOLS = {
     "spotify_results_context",
+    "spotify_results_pause",
     "spotify_results_play",
 }
 

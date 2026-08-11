@@ -102,8 +102,12 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
         assert tools["spotify_results_play"].meta == {
             "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["app"]}
         }
+        assert tools["spotify_results_pause"].meta == {
+            "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["app"]}
+        }
         assert tools["spotify_results_context"].annotations.read_only_hint is True
         assert tools["spotify_results_play"].annotations.read_only_hint is False
+        assert tools["spotify_results_pause"].annotations.idempotent_hint is True
         assert "exactly once" in (tool.description or "")
         assert tool.output_schema is not None
         assert resources[RESULTS_UI_URI].mime_type == "text/html;profile=mcp-app"
@@ -409,3 +413,38 @@ async def test_results_play_rejects_unsupported_or_noncanonical_urls_before_gate
 
     assert result.is_error is True
     assert spotify.calls == []
+
+
+@pytest.mark.anyio
+async def test_results_pause_targets_the_selected_device() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "devices": [
+                    {
+                        "id": "device-1",
+                        "name": "Desk",
+                        "type": "Computer",
+                        "is_active": True,
+                        "is_restricted": False,
+                    }
+                ]
+            },
+            None,
+        ]
+    )
+
+    async with Client(server_with_spotify(spotify)) as client:
+        result = await client.call_tool(
+            "spotify_results_pause",
+            {"device_id": "device-1"},
+        )
+
+    assert result.is_error is False
+    assert result.structured_content["operation"] == "pause"
+    assert spotify.calls[1] == (
+        "PUT",
+        "/me/player/pause",
+        {"device_id": "device-1"},
+        None,
+    )

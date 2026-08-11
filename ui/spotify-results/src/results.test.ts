@@ -157,6 +157,40 @@ describe("SpotifyResultsView", () => {
     });
   });
 
+  it("turns the active card control into Pause and pauses that device", async () => {
+    const bridge = bridgeWith(
+      contextResult({
+        now_playing: {
+          is_playing: true,
+          device: { id: "device-1", name: "Desk", type: "Computer" },
+          item: { spotify_url: TRACKS.items[0]!.spotify_url },
+        },
+      }),
+      {
+        structuredContent: {
+          operation: "pause",
+          status: "accepted",
+          device_id: "device-1",
+        },
+      },
+    );
+    await new SpotifyResultsView(bridge).render(TRACKS);
+
+    const button = document.querySelector<HTMLButtonElement>("button.play")!;
+    expect(button.textContent).toBe("Pause");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+
+    button.click();
+    await vi.waitFor(() => expect(button.textContent).toBe("Play"));
+
+    expect(bridge.callServerTool).toHaveBeenLastCalledWith("spotify_results_pause", {
+      device_id: "device-1",
+    });
+    expect(document.querySelector(".card")?.hasAttribute("aria-current")).toBe(false);
+    expect(document.querySelector(".card-status")?.textContent).toBe("Paused");
+    expect(document.querySelector("#device")?.textContent).toBe("Paused on Desk");
+  });
+
   it("allows only one playback request while a write is in flight", async () => {
     let resolvePlay!: (value: ToolCallResult) => void;
     const pending = new Promise<ToolCallResult>((resolve) => {

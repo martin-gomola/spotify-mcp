@@ -48,6 +48,12 @@ interface ObservedPlaybackResult {
   observed: NowPlaying;
 }
 
+interface PlaybackActionResult {
+  operation: "pause";
+  status: "accepted";
+  device_id: string;
+}
+
 export interface ToolCallResult {
   structuredContent?: unknown;
   isError?: boolean;
@@ -179,8 +185,15 @@ export class SpotifyResultsView {
       playButton.className = "play";
       playButton.textContent = "Play";
       playButton.disabled = true;
+      playButton.setAttribute("aria-pressed", "false");
       playButton.setAttribute("aria-label", `Play ${item.name}${item.subtitle ? ` — ${item.subtitle}` : ""}`);
-      playButton.addEventListener("click", () => void this.#play(item, status));
+      playButton.addEventListener("click", () => {
+        if (card.getAttribute("aria-current") === "true") {
+          void this.#pause(status);
+        } else {
+          void this.#play(item, status);
+        }
+      });
       actions.appendChild(playButton);
     }
 
@@ -305,6 +318,48 @@ export class SpotifyResultsView {
     }
   }
 
+  async #pause(status: HTMLParagraphElement): Promise<void> {
+    if (this.#inFlight || !this.#selectedDeviceId) return;
+    this.#inFlight = true;
+    status.textContent = "Pausing...";
+    status.dataset.state = "starting";
+    status.removeAttribute("role");
+    this.#setFeedback("");
+    this.#syncPlayButtons();
+    try {
+      const result = await this.#bridge.callServerTool("spotify_results_pause", {
+        device_id: this.#selectedDeviceId,
+      });
+      if (result.isError || !isObject(result.structuredContent)) {
+        status.textContent = toolErrorMessage(result);
+        status.dataset.state = "error";
+        status.setAttribute("role", "alert");
+        return;
+      }
+      const playback = result.structuredContent as unknown as PlaybackActionResult;
+      if (playback.operation !== "pause" || playback.status !== "accepted") {
+        status.textContent = "Spotify could not confirm the pause request.";
+        status.dataset.state = "error";
+        status.setAttribute("role", "alert");
+        return;
+      }
+      this.#clearCurrentCard();
+      status.textContent = "Paused";
+      status.dataset.state = "paused";
+      const deviceText = this.#device.textContent || "";
+      this.#device.textContent = deviceText.startsWith("Playing on ")
+        ? deviceText.replace("Playing on ", "Paused on ")
+        : "Spotify paused";
+    } catch {
+      status.textContent = "Spotify could not pause playback.";
+      status.dataset.state = "error";
+      status.setAttribute("role", "alert");
+    } finally {
+      this.#inFlight = false;
+      this.#syncPlayButtons();
+    }
+  }
+
   #markObservedPlayback(nowPlaying: NowPlaying): void {
     if (!nowPlaying.is_playing) return;
     const observedUrl = nowPlaying.item?.spotify_url || spotifyUrlFromUri(nowPlaying.context_uri);
@@ -329,6 +384,14 @@ export class SpotifyResultsView {
   #syncPlayButtons(): void {
     for (const card of this.#cards) {
       if (card.playButton) {
+        const isPlaying = card.element.getAttribute("aria-current") === "true";
+        card.playButton.textContent = isPlaying ? "Pause" : "Play";
+        card.playButton.classList.toggle("is-pause", isPlaying);
+        card.playButton.setAttribute("aria-pressed", String(isPlaying));
+        card.playButton.setAttribute(
+          "aria-label",
+          `${isPlaying ? "Pause" : "Play"} ${card.item.name}${card.item.subtitle ? ` — ${card.item.subtitle}` : ""}`,
+        );
         card.playButton.disabled = this.#inFlight || !this.#selectedDeviceId;
       }
     }
