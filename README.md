@@ -2,15 +2,15 @@
 
 # Spotify for Codex
 
-**Play music, rediscover old favourites, build playlists, and shape DJ sets—just by asking.**
+**Ask Codex to play music, find old favourites, build playlists, or plan a DJ set.**
 
 [Get started](#get-started) · [See what you can ask](#what-can-i-ask) · [Setup guide](docs/setup.md)
 
 </div>
 
 > [!NOTE]
-> This is an independent open-source project, not an official Spotify product. Use it in line with
-> the [Spotify Developer Policy](https://developer.spotify.com/policy).
+> This open-source project has no connection to Spotify AB. Use it in line with the
+> [Spotify Developer Policy](https://developer.spotify.com/policy).
 
 ## What can I ask?
 
@@ -18,21 +18,22 @@
 
 > Build me a road-trip playlist that rediscovers music from across my Liked Songs history.
 
-You can also search for music and podcasts, control playback, safely review your Liked Songs, or
-turn an existing playlist into a DJ running order.
+You can also search for music and podcasts, control playback, review your Liked Songs, or turn a
+playlist into a DJ running order.
 
-## Why it feels different
+## What it can do
 
-- **It knows your music:** explore your full Liked Songs history instead of only recent favourites.
-- **It is careful with changes:** bundled workflows preserve exact Spotify identities, stop on
-  uncertain outcomes, and start DJ reorders as previews with recovery receipts.
-- **It goes beyond search:** shape playlists around a mood, activity, journey, or musical arc—and
-  open results directly in Spotify.
+- **Find music from your library:** search your full Liked Songs history, including tracks you saved
+  years ago.
+- **Build with safeguards:** bundled workflows preserve Spotify track identities. They stop after
+  an uncertain write and preview DJ reorders before they change a playlist.
+
+You can shape a playlist around a mood or journey, then open the result in Spotify.
 
 ## Get started
 
-You need Python 3.11+, [uv](https://docs.astral.sh/uv/), and a Spotify Web API application. Spotify
-uses your app’s Client ID; this project does not need its Client Secret.
+You need Python 3.11+, [uv](https://docs.astral.sh/uv/), and a Spotify Web API app. The server uses
+your app’s Client ID. It does not need the Client Secret.
 
 ### 1. Download the project
 
@@ -51,8 +52,7 @@ Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com
 SPOTIFY_CLIENT_ID=your_client_id
 ```
 
-The [step-by-step setup guide](docs/setup.md) explains each dashboard step and Spotify Development
-Mode restriction.
+The [setup guide](docs/setup.md) covers the dashboard steps and Spotify Development Mode limits.
 
 ### 3. Connect Codex
 
@@ -60,20 +60,20 @@ Mode restriction.
 make codex-install
 ```
 
-Approve the Spotify page that opens, then start a new Codex task. Codex starts the local Spotify
-server when needed; you do not leave another terminal running.
+Approve the Spotify page that opens, then start a new Codex task. Codex starts the local server when
+you use it, so you can close the setup terminal.
 
 ## Safety by default
 
 - Spotify tokens stay outside the repository in a private local file.
-- Audio and DJ fallback may send exact Spotify track IDs to ReccoBeats when Spotify’s own audio
-  data is unavailable or incomplete.
-- A write with an uncertain outcome is never repeated blindly.
-- Low-level removal tools act immediately and have no automatic undo; the bundled library-audit
-  workflow previews exact recording IDs before calling them.
-- The bundled playlist workflow re-reads its intended result; low-level tools report the evidence
-  Spotify returned rather than claiming more certainty.
-- DJ apply and restore default to dry runs and verify the live playlist before changing it.
+- Audio analysis and the DJ fallback may send exact Spotify track IDs to ReccoBeats when Spotify
+  lacks the required audio data.
+- The server stops after a write with an uncertain outcome. It does not retry that write.
+- Low-level removal tools apply changes at once and offer no undo. The library audit workflow shows
+  exact recording IDs before removal.
+- After a playlist write, the workflow fetches the playlist and compares the result. Low-level
+  tools return Spotify’s response without treating an ambiguous result as success.
+- DJ apply and restore start with a dry run. Each command checks the live playlist before a write.
 
 <details>
 <summary><strong>Developing or connecting another MCP client?</strong></summary>
@@ -84,9 +84,9 @@ Complete authentication once:
 make setup
 ```
 
-Then configure your MCP client to launch `uv run spotify-mcp serve` with this repository as its
-working directory. The exact configuration belongs to that client; this repository currently
-provides guided installation only for Codex. For local development and verification, follow the
+Configure your MCP client to launch `uv run spotify-mcp serve` with this repository as its working
+directory. Each client uses its own configuration. This repository provides a guided installer for
+Codex. For local development and verification, follow the
 [development guide](docs/development.md).
 
 </details>
@@ -99,6 +99,5 @@ provides guided installation only for Codex. For local development and verificat
 - [Development and verification](docs/development.md)
 - [Security policy](SECURITY.md)
 
-The source is available under the [MIT License](LICENSE). Spotify is a trademark of Spotify AB;
-this project is independently developed and is not affiliated with, sponsored by, or endorsed by
-Spotify AB.
+The source uses the [MIT License](LICENSE). Spotify AB owns the Spotify trademark and does not
+sponsor or endorse this project.
