@@ -23,7 +23,8 @@ Use exact Spotify URIs and finish with an observed playlist, not an optimistic s
    interchangeable.
 2. Shape an intentional arc for the activity; do not globally sort one scalar unless explicitly
    requested.
-3. Create privately unless the user requests public, then add at most 100 URIs per write.
+3. Create public by default, matching Spotify's default, unless the user requests private. Add at
+   most 100 URIs per write.
 4. Treat `ambiguous`, `mismatch`, `stale`, or `partial` as stop states. Re-read before deciding what
    happened and never repeat the write automatically.
 5. Re-read the entire result and compare exact URIs and order. Return the playlist URL, track list,

@@ -5,6 +5,7 @@ cases:
     expectations:
       - "Uses spotify_sample_liked_songs rather than only the newest saved page."
       - "Preserves exact recording URIs and shapes a driving arc."
+      - "Creates public by default unless the user explicitly requests private."
       - "Re-reads the complete playlist and reports verification state."
   - name: ambiguous_write
     prompt: "The add tool returned ambiguous"
