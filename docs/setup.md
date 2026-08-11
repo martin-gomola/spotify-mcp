@@ -132,9 +132,21 @@ If the checkout is elsewhere, set the absolute path before starting Codex:
 export SPOTIFY_MCP_REPO=/absolute/path/to/spotify-mcp
 ```
 
-Then install or enable the local `spotify-mcp` plugin from this repository's marketplace. The
-plugin contributes the MCP server plus setup, playlist-building, and library-audit skills. Run
-authentication from a terminal before asking Codex to use Spotify.
+Install the public Git-backed marketplace and enable its plugin:
+
+```bash
+codex plugin marketplace add martin-gomola/spotify-mcp --ref main
+codex plugin add spotify-mcp@spotify-mcp
+```
+
+Refresh future releases with:
+
+```bash
+codex plugin marketplace upgrade spotify-mcp
+```
+
+The plugin contributes the MCP server plus setup, playlist-building, and library-audit skills.
+Run authentication from a terminal before asking Codex to use Spotify.
 
 The bundled `.mcp.json` deliberately contains no Spotify credentials. It only locates the checkout
 and starts the local process.
