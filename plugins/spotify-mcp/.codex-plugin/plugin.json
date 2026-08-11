@@ -1,6 +1,6 @@
 {
   "name": "spotify-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local-first Spotify tools for music, podcasts, safe playlists, and DJ planning.",
   "author": { "name": "Martin Gomola" },
   "license": "MIT",
@@ -17,9 +17,8 @@
     "capabilities": ["Interactive", "Read", "Write"],
     "brandColor": "#0EA5E9",
     "defaultPrompt": [
-      "Build a road-trip playlist from across my Liked Songs history",
-      "Find podcasts for my next road trip",
-      "Plan a DJ running order that peaks late"
+      "Play something I'll like",
+      "Build me a road-trip playlist that rediscovers music from across my Liked Songs history"
     ]
   }
 }

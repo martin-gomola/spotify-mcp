@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Simplified the root README around a friendly Codex setup path with optional technical detail.
+- Reduced the plugin suggestions to one general request and one Liked Songs rediscovery use case.
+- Added typed DJ tool results so their public structured schemas describe the returned fields.
+
 ## 0.2.0
 
 - Added canonical Spotify web links across music, library, playlist, playback, and podcast results.
