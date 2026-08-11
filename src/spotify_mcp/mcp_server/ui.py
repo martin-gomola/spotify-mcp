@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from importlib.resources import files
 from typing import Literal, cast
 from urllib.parse import urlsplit
@@ -146,8 +147,8 @@ def create_results_apps() -> Apps:
     )
     async def results_context(ctx: Context[AppContext]) -> SpotifyResultsContext:
         service = PlaybackService(ctx.request_context.lifespan_context.spotify)
-        devices = (await service.devices()).devices
-        now_playing = await service.now_playing()
+        device_result, now_playing = await asyncio.gather(service.devices(), service.now_playing())
+        devices = device_result.devices
         usable = [
             device for device in devices if device.id is not None and not device.is_restricted
         ]
@@ -165,7 +166,9 @@ def create_results_apps() -> Apps:
         visibility=("app",),
         name="spotify_results_play",
         title="Play Spotify result",
-        description="Play one exact result on one selected device and observe playback once.",
+        description=(
+            "Play one exact result on one selected device and verify it with bounded fresh reads."
+        ),
         annotations=WRITE,
         structured_output=True,
     )

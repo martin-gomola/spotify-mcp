@@ -386,20 +386,23 @@ async def test_play_and_observe_verifies_exact_track_without_retrying_write() ->
 
 @pytest.mark.anyio
 async def test_play_and_observe_reports_unverified_mismatch_without_retrying_write() -> None:
+    mismatched_observation = {
+        "is_playing": True,
+        "device": ACTIVE_DEVICES["devices"][0],
+        "item": {
+            "type": "track",
+            "id": "different",
+            "uri": "spotify:track:different",
+            "name": "Different Track",
+        },
+    }
     spotify = FakeSpotify(
         [
             ACTIVE_DEVICES,
             None,
-            {
-                "is_playing": True,
-                "device": ACTIVE_DEVICES["devices"][0],
-                "item": {
-                    "type": "track",
-                    "id": "different",
-                    "uri": "spotify:track:different",
-                    "name": "Different Track",
-                },
-            },
+            mismatched_observation,
+            mismatched_observation,
+            mismatched_observation,
         ]
     )
 
@@ -439,6 +442,43 @@ async def test_play_and_observe_verifies_context_uri_for_album() -> None:
 
     assert result.status == "verified"
     assert result.observed.context_uri == "spotify:album:album-1"
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_rechecks_stale_playlist_state_without_retrying_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_wait(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("spotify_mcp.application.playback.anyio.sleep", no_wait)
+    spotify = FakeSpotify(
+        [
+            ACTIVE_DEVICES,
+            None,
+            {
+                "is_playing": True,
+                "device": ACTIVE_DEVICES["devices"][0],
+                "context": {"type": "playlist", "uri": "spotify:playlist:previous"},
+                "item": {"type": "track", "uri": "spotify:track:old", "name": "Old"},
+            },
+            {
+                "is_playing": True,
+                "device": ACTIVE_DEVICES["devices"][0],
+                "context": {"type": "playlist", "uri": "spotify:playlist:hip"},
+                "item": {"type": "track", "uri": "spotify:track:new", "name": "New"},
+            },
+        ]
+    )
+
+    result = await PlaybackService(spotify).play_and_observe(
+        uri="spotify:playlist:hip", device_id="device-1"
+    )
+
+    assert result.status == "verified"
+    assert result.observed.context_uri == "spotify:playlist:hip"
+    assert [call[0:2] for call in spotify.calls].count(("GET", "/me/player")) == 2
+    assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/play")) == 1
 
 
 @pytest.mark.anyio

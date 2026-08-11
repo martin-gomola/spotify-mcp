@@ -1,6 +1,6 @@
 ---
 name: build-spotify-playlist
-description: Build, extend, curate, verify, or DJ-order Spotify playlists. Use for mood, activity, era, artist, Liked Songs, rediscovery, exact recording selection, playlist edits, BPM/key flow, or DJ running order. Avoid for removing items from Liked Songs; use spotify-library-doctor.
+description: Build, extend, curate, verify, or DJ-order Spotify playlists. Use for mood, activity, era, artist, Liked Songs, rediscovery, exact recording selection, playlist edits, BPM/key flow, or DJ running order. Avoid for simply finding, showing, or opening an existing playlist; call the playlist read tools directly. Avoid for removing items from Liked Songs; use spotify-library-doctor.
 ---
 
 # Build a Spotify playlist
@@ -31,9 +31,9 @@ Use exact Spotify URIs and finish with an observed playlist, not an optimistic s
 
 When the client supports MCP Apps, prefer `spotify_render_results` for the final verified playable
 entities. Its cards can start the exact track, album, artist, or playlist on a selected device and
-report one observed playback read; they never discover, rank, verify source data, or substitute an
-entity. Episodes and shows remain link/queue flows. Return canonical Markdown links when MCP Apps
-are unavailable.
+verify playback with bounded fresh reads; they never discover, rank, verify source data, or
+substitute an entity. Episodes and shows remain link/queue flows. Return canonical Markdown links
+when MCP Apps are unavailable.
 
 For DJ flow, start with the read-only `spotify_dj_audit`, then run `spotify_dj_analyze` and
 `spotify_dj_plan`. Analysis enriches recordings automatically and accepts exact overrides when

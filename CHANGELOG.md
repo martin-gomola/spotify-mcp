@@ -9,6 +9,8 @@
 - Added multi-version GitHub CI and Dependabot coverage.
 - Rendered initial tool input after the MCP Apps handshake, while preventing repeated result events
   and stale playback-context responses from duplicating or flickering the inline results UI.
+- Reduced inline-result latency with concurrent context reads and avoided false playback errors by
+  polling fresh state briefly without repeating the Spotify write.
 
 ## 0.2.2
 

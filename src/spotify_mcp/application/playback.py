@@ -29,6 +29,7 @@ PlaybackOperation = Literal[
     "set_repeat",
     "transfer_playback",
 ]
+_PLAYBACK_OBSERVATION_DELAYS = (0.0, 0.2, 0.4)
 
 
 class Model(BaseModel):
@@ -314,7 +315,7 @@ class PlaybackService:
         uri: str,
         device_id: str | None,
     ) -> ObservedPlaybackResult:
-        """Start one exact entity on one explicit device and observe the resulting state once."""
+        """Start one exact entity and observe bounded fresh state without retrying the write."""
 
         if device_id is None:
             raise ValueError("device_id is required for direct play")
@@ -327,18 +328,29 @@ class PlaybackService:
             raise ValueError(f"Spotify device cannot be controlled: {selected.name}")
 
         await self._start_playback(resolved_uri, device_id=device_id)
-        observed = await self.now_playing()
         resolved_type = resolved_uri.split(":", maxsplit=2)[1]
-        observed_matches = (
-            observed.item is not None and observed.item.uri == resolved_uri
-            if resolved_type == "track"
-            else observed.context_uri == resolved_uri
-        )
-        device_matches = observed.device is not None and observed.device.id == device_id
+        observed: NowPlaying | None = None
+        for delay in _PLAYBACK_OBSERVATION_DELAYS:
+            if delay:
+                await anyio.sleep(delay)
+            observed = await self.now_playing()
+            observed_matches = (
+                observed.item is not None and observed.item.uri == resolved_uri
+                if resolved_type == "track"
+                else observed.context_uri == resolved_uri
+            )
+            device_matches = observed.device is not None and observed.device.id == device_id
+            if observed.is_playing and device_matches and observed_matches:
+                return ObservedPlaybackResult(
+                    status="verified",
+                    requested_uri=resolved_uri,
+                    device_id=device_id,
+                    observed=observed,
+                )
+
+        assert observed is not None
         return ObservedPlaybackResult(
-            status="verified"
-            if observed.is_playing and device_matches and observed_matches
-            else "unverified",
+            status="unverified",
             requested_uri=resolved_uri,
             device_id=device_id,
             observed=observed,

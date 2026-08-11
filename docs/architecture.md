@@ -20,10 +20,11 @@ MCP tools -> application use cases -> domain models and algorithms
 The optional MCP Apps extension is deliberately separate from data acquisition. Normal tools
 return typed data and canonical Spotify URLs first; `spotify_render_results` presents a final
 selection from that data. The view can call two resource-bound, app-visible controls to load usable
-devices and play one exact card with a single observed-state read. These controls are hidden from
-the model by discovery metadata, not an authorization boundary. Its packaged HTML is self-contained
-and declares an empty remote-resource CSP; clients without Apps support keep structured JSON, text,
-and canonical-link fallbacks.
+devices and play one exact card with bounded observed-state reads. The independent device and
+now-playing reads load concurrently. These controls are hidden from the model by discovery
+metadata, not an authorization boundary. Its packaged HTML is self-contained and declares an empty
+remote-resource CSP; clients without Apps support keep structured JSON, text, and canonical-link
+fallbacks.
 
 `bootstrap.py` is the composition root. One async HTTP client and the local repositories live for
 the MCP server lifespan; tool modules never create hidden global clients.
@@ -39,7 +40,7 @@ the MCP server lifespan; tool modules never create hidden global clients.
 - Destructive tools require exact Spotify URIs and advertise destructive MCP annotations.
 - DJ application checks the live snapshot and observable order before the first write.
 - Presentation accepts only canonical `https://open.spotify.com/{type}/{id}` entity URLs.
-- Inline playback requires an explicit usable device and performs one write followed by one read;
-  only exact observed item/context and device matches are reported as verified.
+- Inline playback requires an explicit usable device and performs one write followed by bounded
+  fresh reads; only exact observed item/context and device matches are reported as verified.
 - Inline playback never trusts an active-device flag when several controllable devices exist; the
   user must choose the target for that result view.

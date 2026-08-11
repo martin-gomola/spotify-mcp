@@ -4,10 +4,12 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
+import anyio
 import pytest
 from mcp import Client
 from mcp.server import MCPServer
 
+from spotify_mcp.application.ports import SpotifyGateway
 from spotify_mcp.mcp_server.context import AppContext
 from spotify_mcp.mcp_server.ui import RESULTS_UI_URI, create_results_apps
 
@@ -32,7 +34,46 @@ class FakeSpotify:
         return response
 
 
-def server_with_spotify(spotify: FakeSpotify) -> MCPServer[AppContext]:
+class ConcurrentContextSpotify:
+    def __init__(self) -> None:
+        self.started: set[str] = set()
+        self.both_started = anyio.Event()
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,
+    ) -> Any:
+        assert method == "GET"
+        assert params is None
+        assert json is None
+        self.started.add(path)
+        if self.started == {"/me/player/devices", "/me/player"}:
+            self.both_started.set()
+        with anyio.fail_after(0.1):
+            await self.both_started.wait()
+        if path == "/me/player/devices":
+            return ACTIVE_CONTEXT_DEVICES
+        return {"is_playing": False}
+
+
+ACTIVE_CONTEXT_DEVICES = {
+    "devices": [
+        {
+            "id": "device-1",
+            "name": "Desk",
+            "type": "Computer",
+            "is_active": True,
+            "is_restricted": False,
+        }
+    ]
+}
+
+
+def server_with_spotify(spotify: SpotifyGateway) -> MCPServer[AppContext]:
     @asynccontextmanager
     async def lifespan(_server: MCPServer[AppContext]) -> AsyncIterator[AppContext]:
         yield AppContext(spotify=spotify, artifacts=object(), audio=object())  # type: ignore[arg-type]
@@ -211,6 +252,17 @@ async def test_results_context_selects_active_device_and_returns_observed_state(
     assert result.structured_content["requires_device_selection"] is False
     assert result.structured_content["has_usable_devices"] is True
     assert result.structured_content["now_playing"]["item"]["uri"] == "spotify:track:track-1"
+
+
+@pytest.mark.anyio
+async def test_results_context_loads_independent_spotify_reads_concurrently() -> None:
+    spotify = ConcurrentContextSpotify()
+
+    async with Client(server_with_spotify(spotify)) as client:
+        result = await client.call_tool("spotify_results_context", {})
+
+    assert result.is_error is False
+    assert spotify.started == {"/me/player/devices", "/me/player"}
 
 
 @pytest.mark.anyio

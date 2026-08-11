@@ -204,9 +204,11 @@ describe("SpotifyResultsView", () => {
     expect(cards[0]!.getAttribute("aria-current")).toBe("true");
     buttons[1]!.click();
     await vi.waitFor(() => expect(cards[1]!.querySelector(".card-status")?.textContent).toContain(
-      "did not confirm",
+      "confirmation is still pending",
     ));
     expect(cards[0]!.getAttribute("aria-current")).toBe("true");
+    expect(cards[1]!.querySelector(".card-status")?.getAttribute("data-state")).toBe("pending");
+    expect(cards[1]!.querySelector(".card-status")?.getAttribute("role")).toBeNull();
     expect(bridge.callServerTool).toHaveBeenCalledTimes(2);
   });
 

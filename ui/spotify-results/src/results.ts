@@ -280,9 +280,9 @@ export class SpotifyResultsView {
       }
       const playback = result.structuredContent as unknown as ObservedPlaybackResult;
       if (playback.status !== "verified") {
-        status.textContent = "Playback requested, but Spotify did not confirm this item.";
-        status.dataset.state = "error";
-        status.setAttribute("role", "alert");
+        status.textContent = "Playback request accepted; Spotify confirmation is still pending.";
+        status.dataset.state = "pending";
+        status.removeAttribute("role");
         return;
       }
       this.#clearCurrentCard();

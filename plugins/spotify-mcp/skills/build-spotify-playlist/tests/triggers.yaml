@@ -6,4 +6,5 @@ should_trigger:
 should_not_trigger:
   - "Remove duplicate remasters from Liked Songs"
   - "Reconnect Spotify"
+  - "Show me my Hip playlist"
 threshold: { min_tpr: 0.9, max_fpr: 0.1 }
