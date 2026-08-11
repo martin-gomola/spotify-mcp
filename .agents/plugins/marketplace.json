@@ -1,0 +1,12 @@
+{
+  "name": "spotify-mcp",
+  "interface": { "displayName": "Spotify MCP" },
+  "plugins": [
+    {
+      "name": "spotify-mcp",
+      "source": { "source": "local", "path": "./plugins/spotify-mcp" },
+      "policy": { "installation": "AVAILABLE" },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+skill: setup-spotify-mcp
+cases:
+  - name: fresh_setup
+    prompt: "Connect Spotify for me"
+    expectations:
+      - "Runs local dependency and diagnostic steps without handing ordinary commands to the user."
+      - "Requests a client ID but never a client secret."
+      - "Uses the exact 127.0.0.1 callback and verifies the finished connection."
+threshold: { pass_rate: 1.0 }

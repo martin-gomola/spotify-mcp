@@ -1,0 +1,13 @@
+skill: spotify-library-doctor
+cases:
+  - name: read_only_audit
+    prompt: "Audit my whole Liked Songs library and change nothing"
+    expectations:
+      - "Reads the complete library and preserves exact URIs, positions, dates, and durations."
+      - "Previews distinct evidence groups and performs no removal."
+  - name: approved_apply
+    prompt: "Apply only candidates A2 and C1"
+    expectations:
+      - "Re-reads candidates before mutation and removes only approved exact URIs."
+      - "Re-scans and verifies both removals and retained recordings."
+threshold: { pass_rate: 1.0 }

@@ -1,0 +1,14 @@
+skill: build-spotify-playlist
+cases:
+  - name: liked_songs_road_trip
+    prompt: "Build a road-trip playlist from my Liked Songs"
+    expectations:
+      - "Uses spotify_sample_liked_songs rather than only the newest saved page."
+      - "Preserves exact recording URIs and shapes a driving arc."
+      - "Re-reads the complete playlist and reports verification state."
+  - name: ambiguous_write
+    prompt: "The add tool returned ambiguous"
+    expectations:
+      - "Does not repeat the write automatically."
+      - "Reads the playlist and compares exact intended versus observed URIs."
+threshold: { pass_rate: 1.0 }

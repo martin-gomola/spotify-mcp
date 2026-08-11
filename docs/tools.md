@@ -1,0 +1,157 @@
+# Tool catalog
+
+Spotify MCP exposes 45 structured tools. Asterisks in the input column mark required fields; all
+other inputs are optional and use the defaults shown below.
+
+## Status and discovery
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_status` | None | Spotify read when configured | Return actionable configuration details before setup. When configured, validate the saved authentication and return `authenticated=false` when the local grant is missing or expired. |
+| `spotify_search` | `query*`, `item_type*`, `limit=10`, `offset=0` | Spotify read | Search one type: `track`, `album`, `artist`, `playlist`, `episode`, or `show`. Limit is 1–10. |
+| `spotify_recently_played` | `limit=20` | Spotify read | Return up to 50 recently played tracks. |
+| `spotify_top_tracks` | `time_range=medium_term`, `limit=20` | Spotify read | Return up to 50 top tracks for `short_term`, `medium_term`, or `long_term`. |
+| `spotify_top_artists` | `time_range=medium_term`, `limit=20` | Spotify read | Return up to 50 top artists for a Spotify time range. Missing genre data remains `null`, not an inferred empty list. |
+
+Search returns at most ten items per call even when Spotify reports a larger total. Increase
+`offset` to request another page.
+
+## Playback
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_now_playing` | None | Spotify read | Return playback state, current item, device, progress, shuffle, and repeat state. |
+| `spotify_devices` | None | Spotify read | List available Spotify Connect devices. |
+| `spotify_queue` | `limit=10` | Spotify read | Return the current item and up to 50 queued items. |
+| `spotify_play` | `uri` or `item_type` + `item_id`, `device_id`, `offset` | Spotify write | Start a track, album, artist, or playlist. For a track, `offset` is milliseconds; for a context it is the item position. |
+| `spotify_resume` | `device_id` | Spotify write | Resume playback. |
+| `spotify_pause` | `device_id` | Spotify write | Pause playback. |
+| `spotify_next` | `device_id` | Spotify write | Skip to the next item. |
+| `spotify_previous` | `device_id` | Spotify write | Skip to the previous item. |
+| `spotify_add_to_queue` | `uri` or `item_type` + `item_id`, `device_id` | Spotify write | Queue one `track` or podcast `episode`. |
+| `spotify_set_volume` | `volume_percent*`, `device_id` | Spotify write | Set device volume from 0 through 100. |
+| `spotify_adjust_volume` | `adjustment*`, `device_id` | Spotify write | Add or subtract relative volume on the selected device, clamped to 0 through 100. |
+
+When `device_id` is omitted, the server uses the active device or the first available device. It
+transfers Spotify Connect to the selected device when necessary. Playback write results mean
+Spotify accepted the API request; they are not a subsequent playback-state verification.
+
+## Liked Songs
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_saved_tracks` | `limit=50`, `offset=0` | Spotify read | Return one page of Liked Songs with saved date and stable library position. Limit is 1–50. |
+| `spotify_sample_liked_songs` | `sample_size=48` | Spotify read | Return a deterministic, stratified sample spanning the complete saved-history range. Size is 8–100. |
+| `spotify_library_contains` | `track_ids*` | Spotify read | Check up to 40 exact track IDs. Spotify track URI prefixes are accepted. |
+| `spotify_library_save` | `track_ids*` | Spotify write + read verification | Save up to 40 exact tracks and verify their observed state once. |
+| `spotify_library_remove` | `track_ids*` | Destructive Spotify write + read verification | Remove up to 40 exact tracks and verify their observed state once. There is no automatic undo. |
+
+`spotify_sample_liked_songs` is intended for taste-based playlist work. It samples across the
+history; it is not a complete library audit. Page through `spotify_saved_tracks` for a complete
+scan.
+
+## Albums
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_albums` | `album_ids*` | Spotify read | Fetch typed metadata for up to 20 exact albums. Unknown IDs are returned separately. |
+| `spotify_album_tracks` | `album_id*`, `limit=20`, `offset=0` | Spotify read | Return one page of tracks from an exact album. Limit is 1–50. |
+| `spotify_saved_albums` | `limit=20`, `offset=0` | Spotify read | Return one page of albums saved in the current user's library. Limit is 1–50. |
+| `spotify_album_library_contains` | `album_ids*` | Spotify read | Check whether up to 40 exact albums are saved. |
+| `spotify_album_library_save` | `album_ids*` | Spotify write + read verification | Save up to 40 exact albums through Spotify's shared library endpoint and verify once. |
+| `spotify_album_library_remove` | `album_ids*` | Destructive Spotify write + read verification | Remove up to 40 exact saved albums and verify once. |
+
+Album tools accept bare album IDs or `spotify:album:...` URIs. `spotify_albums` uses supported
+singular album requests with bounded concurrency rather than Spotify's retired batch-albums
+endpoint.
+
+## Playlists
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_playlists` | `limit=50`, `offset=0` | Spotify read | Return one page of the current user's playlists. Limit is 1–50. |
+| `spotify_playlist` | `playlist_id*` | Spotify read | Return exact playlist metadata, owner, URL, visibility, and snapshot. |
+| `spotify_playlist_items` | `playlist_id*`, `limit=50`, `offset=0` | Spotify read | Return one page of tracks and podcast episodes with one-based playlist positions. |
+| `spotify_playlist_create` | `name*`, `description=""`, `public=false` | Spotify write + visibility verification | Create a playlist, private by default, then re-read its observed visibility. |
+| `spotify_playlist_update` | `playlist_id*`, requested metadata fields | Spotify write + read verification | Update `name`, `description`, `public`, or `collaborative`, then verify requested fields once. |
+| `spotify_playlist_add` | `playlist_id*`, `item_ids_or_uris*`, `position` | Spotify write | Add up to 100 track IDs or track/episode URIs. A returned snapshot proves request acceptance. |
+| `spotify_playlist_remove` | `playlist_id*`, `item_ids_or_uris*`, `snapshot_id` | Destructive Spotify write | Remove up to 100 exact items, optionally against a specific snapshot. |
+| `spotify_playlist_reorder` | `playlist_id*`, `range_start*`, `insert_before*`, `range_length=1`, `snapshot_id` | Spotify write | Move one consecutive range using zero-based Spotify positions. |
+| `spotify_playlist_unfollow` | `playlist_id*` | Destructive Spotify write + read verification | Remove a playlist from the user's library. Spotify does not expose permanent playlist deletion. |
+
+Bare values in `item_ids_or_uris` are treated as track IDs. Use a full `spotify:episode:...` URI for
+podcast episodes. For exact concurrency control, pass the most recently observed `snapshot_id` to
+remove and reorder operations.
+
+## Audio analysis
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_audio_features` | `track_ids*`, `source=auto`, `overrides` | Spotify and/or ReccoBeats read | Return field-level measurements and provenance for up to 100 exact recordings. |
+| `spotify_audio_compare` | `track_ids*` | Spotify and ReccoBeats read | Compare both providers for up to 25 tracks without selecting a hidden winner. |
+| `spotify_audio_audit` | `track_ids*`, `source=auto`, `overrides` | Spotify and/or ReccoBeats read | Summarize coverage, missing fields, and material conflicts for up to 100 tracks. |
+
+`source` accepts `auto`, `spotify`, or `reccobeats`. Auto mode calls Spotify first and falls back to
+ReccoBeats only when Spotify returns 403 or 404; it does not hide other Spotify failures. ReccoBeats
+is an external provider and may return incomplete or heuristic data.
+
+Overrides preserve the superseded provider observation. Each override requires `track_id` and may
+set `tempo`, `key` (0–11), `mode` (0 or 1), `loudness`, or unit-interval fields such as `energy`,
+`danceability`, and `valence`. Audio measurements are planning evidence, not musical-quality
+scores.
+
+## DJ planning
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_dj_analyze` | `playlist_id*`, `source=auto`, `missing_feature_policy=anchor`, `overrides`, `features` | Spotify and/or ReccoBeats read + local immutable write | Read every playlist item, enrich exact recordings automatically, apply explicit overrides last, verify the snapshot, and store an analysis artifact with provenance and coverage. |
+| `spotify_dj_audit` | `playlist_id*`, `source=auto`, `overrides` | Spotify and/or ReccoBeats read | Audit the complete playlist for feature coverage, duplicates, tempo ambiguity, provider conflicts, and heuristic opening/peak/reset candidates. |
+| `spotify_dj_plan` | `analysis_id*`, `energy_curve=warmup-build-peak-close`, `artist_spacing=3` | Local immutable write | Build a deterministic target order without changing Spotify. Curves: `warmup-build-peak-close`, `steady`, `rising`, or `waves`. |
+| `spotify_dj_apply` | `plan_id*`, `expected_snapshot_id`, `dry_run=true` | Preview or Spotify reorder writes + local receipt | Check snapshot and exact order, preview by default, or apply the planned range moves. |
+| `spotify_dj_restore` | `receipt_id*`, `expected_snapshot_id*`, `dry_run=true` | Preview or Spotify reorder writes + local receipt | Restore the exact pre-plan order recorded in a receipt. |
+| `spotify_playlist_sort_by_bpm` | `playlist_id*`, `mode=tempoEnergy`, `dry_run=true`, `allow_partial=false`, `source=auto`, `overrides` | Preview or Spotify reorder writes + local receipt | Run the legacy-compatible stable BPM/energy sort while anchoring unavailable positions and using the shared verified mutation executor. |
+
+DJ analysis automatically uses the shared audio-provider policy. Explicit `overrides` and legacy
+`features` remain available; explicit values win without erasing provider provenance. Missing
+values remain warnings with `anchor`, while `error` rejects incomplete analysis before storing an
+artifact. Duplicate playlist entries use position-safe occurrence tokens. Provider measurements
+are fetched live; no refresh option is exposed because this release does not cache them.
+
+`spotify_playlist_sort_by_bpm` preserves the original compatibility modes: `tempoEnergy`, its
+deprecated alias `dj`, `ascending`, and `descending`. It previews by default. With
+`allow_partial=true`, positions without BPM remain fixed rather than being dropped or guessed.
+
+If `expected_snapshot_id` is omitted from `spotify_dj_apply`, the plan's source snapshot is used.
+Restore always requires the currently expected snapshot explicitly. Keep `dry_run=true` until the
+preview, live snapshot, and target order are acceptable.
+
+## Safety and result states
+
+The tools expose uncertainty instead of converting it into success:
+
+- `verified`: a fresh read matched the requested library or metadata state.
+- `mismatch`: a fresh read completed but did not match the requested state.
+- `accepted`: Spotify returned the expected success evidence, such as a playlist snapshot or a
+  successful playback response. This is not always a complete content re-read.
+- `ambiguous`: the write may have succeeded, but the server could not prove the outcome. Read the
+  relevant state before another write.
+- `dry-run`: the DJ mutation was previewed and Spotify was not changed.
+- `stale`: the live DJ playlist snapshot or exact order no longer matched the plan.
+- `partial`: some DJ moves occurred, but final verification did not match the destination.
+- `unchanged`: the DJ playlist already had the requested order.
+
+Never repeat an `ambiguous` write automatically. For DJ `partial` or `stale` results, preserve the
+receipt and returned snapshots and inspect the live playlist before applying or restoring anything
+else.
+
+## Shared limitations
+
+- Spotify API availability, account product, application mode, market, and content restrictions
+  still apply.
+- Playback requires an available Spotify Connect device and may require Premium.
+- List tools return bounded pages. A complete audit must follow `total` and `offset` until all pages
+  are read.
+- Search and audio providers can omit fields. The server returns missing data rather than inventing
+  values.
+- Spotify does not provide permanent playlist deletion through these tools; unfollow removes a
+  playlist from the current user's library.

@@ -1,0 +1,53 @@
+[project]
+name = "spotify-mcp"
+version = "0.1.0"
+description = "Local-first Spotify MCP server with safe playlist and DJ workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Martin Gomola" }]
+dependencies = [
+  "httpx>=0.28,<1",
+  "mcp==2.0.0",
+  "platformdirs>=4.3,<5",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "python-dotenv>=1.1,<2",
+]
+
+[project.scripts]
+spotify-mcp = "spotify_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spotify_mcp"]
+
+[dependency-groups]
+dev = [
+  "anyio>=4.9",
+  "mcp[cli]==2.0.0",
+  "mypy>=1.17",
+  "pytest>=8.4",
+  "pytest-cov>=6.2",
+  "pytest-httpx>=0.35",
+  "ruff>=0.12",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["spotify_mcp"]

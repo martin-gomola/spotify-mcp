@@ -1,0 +1,9 @@
+skill: build-spotify-playlist
+should_trigger:
+  - "Build a road-trip playlist from my Liked Songs"
+  - "Add these exact versions to my dinner playlist"
+  - "Plan this playlist as a DJ set that peaks late"
+should_not_trigger:
+  - "Remove duplicate remasters from Liked Songs"
+  - "Reconnect Spotify"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

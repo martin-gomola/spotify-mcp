@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spotify library doctor"
+  short_description: "Audit and carefully clean up Liked Songs"
+  default_prompt: "Use $spotify-library-doctor to audit my Liked Songs, preview exact candidates, and change nothing without explicit approval."
