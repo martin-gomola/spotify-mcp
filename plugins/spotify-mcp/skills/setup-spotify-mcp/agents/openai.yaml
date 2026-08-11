@@ -1,0 +1,4 @@
+interface:
+  display_name: "Set up Spotify MCP"
+  short_description: "Connect or repair local Spotify access"
+  default_prompt: "Use $setup-spotify-mcp to connect my Spotify account and complete every local setup step you can."

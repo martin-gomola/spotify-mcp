@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "spotify-mcp": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "repo=\"${SPOTIFY_MCP_REPO:-$HOME/dev/spotify-mcp}\"; cd \"$repo\" 2>/dev/null || { echo \"spotify-mcp not found at $repo\" >&2; exit 1; }; exec uv run spotify-mcp serve"
+      ],
+      "enabled": true,
+      "note": "Runs the local Python Spotify MCP server. Set SPOTIFY_MCP_REPO to override the default checkout and run 'uv run spotify-mcp auth' once before use."
+    }
+  }
+}

@@ -1,0 +1,9 @@
+skill: spotify-library-doctor
+should_trigger:
+  - "Audit my Liked Songs for duplicate versions"
+  - "Show suspicious remasters in my saved library"
+  - "Remove only the library candidates I approved"
+should_not_trigger:
+  - "Remove duplicates from my Road Trip playlist"
+  - "Build a playlist from older saved songs"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

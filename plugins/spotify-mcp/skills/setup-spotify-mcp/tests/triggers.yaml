@@ -1,0 +1,9 @@
+skill: setup-spotify-mcp
+should_trigger:
+  - "Connect my Spotify account"
+  - "Spotify MCP says authentication is required"
+  - "Repair my local Spotify tools"
+should_not_trigger:
+  - "Build me a driving playlist"
+  - "Pause Spotify"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

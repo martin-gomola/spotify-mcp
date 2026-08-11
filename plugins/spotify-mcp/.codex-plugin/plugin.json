@@ -1,0 +1,26 @@
+{
+  "name": "spotify-mcp",
+  "version": "0.1.0",
+  "description": "Local-first Spotify tools for playback, library discovery, safe playlists, and DJ planning.",
+  "author": { "name": "Martin Gomola" },
+  "license": "MIT",
+  "keywords": ["spotify", "mcp", "playlist", "music", "dj"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Spotify MCP",
+    "shortDescription": "Use Spotify naturally and safely from Codex.",
+    "longDescription": "Search and control Spotify, rediscover music across your full Liked Songs history, build verified playlists, audit saved recordings, and plan snapshot-safe DJ running orders. Credentials stay on your machine and uncertain writes are never retried blindly.",
+    "developerName": "Martin Gomola",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/martin-gomola/spotify-mcp",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "brandColor": "#1DB954",
+    "defaultPrompt": [
+      "Connect my Spotify account",
+      "Build a road-trip playlist from across my Liked Songs history",
+      "Audit my Liked Songs without changing anything",
+      "Plan a DJ running order that peaks late"
+    ]
+  }
+}

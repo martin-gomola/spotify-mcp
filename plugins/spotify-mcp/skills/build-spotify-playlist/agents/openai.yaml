@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build a Spotify playlist"
+  short_description: "Create and verify playlists or DJ orders"
+  default_prompt: "Use $build-spotify-playlist to create a verified Spotify playlist with an intentional listening arc."

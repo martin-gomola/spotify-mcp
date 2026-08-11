@@ -1,0 +1,192 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+import pytest
+from mcp.server.mcpserver import MCPServer
+
+from spotify_mcp.application.albums import (
+    check_saved_albums,
+    get_album_tracks,
+    get_albums,
+    get_saved_albums,
+    remove_saved_albums,
+    save_albums,
+)
+from spotify_mcp.domain.errors import SpotifyRequestError
+from spotify_mcp.mcp_server.context import AppContext
+from spotify_mcp.mcp_server.tools.albums import register
+
+
+class FakeSpotify:
+    def __init__(self, responses: list[Any]) -> None:
+        self.responses = responses
+        self.calls: list[tuple[str, str, Mapping[str, Any] | None, Any]] = []
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,
+    ) -> Any:
+        self.calls.append((method, path, params, json))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def album(album_id: str) -> dict[str, Any]:
+    return {
+        "id": album_id,
+        "uri": f"spotify:album:{album_id}",
+        "name": f"Album {album_id}",
+        "artists": [{"name": "Artist"}],
+        "release_date": "2026-08-11",
+        "total_tracks": 10,
+        "external_urls": {"spotify": f"https://open.spotify.com/album/{album_id}"},
+    }
+
+
+@pytest.mark.anyio
+async def test_albums_use_singular_endpoint_and_report_unknown_ids() -> None:
+    spotify = FakeSpotify(
+        [album("a"), SpotifyRequestError("not found", status_code=404), album("c")]
+    )
+
+    result = await get_albums(spotify, ["a", "missing", "spotify:album:c"])
+
+    assert [item.id for item in result.albums] == ["a", "c"]
+    assert result.missing_ids == ["missing"]
+    assert [call[1] for call in spotify.calls] == ["/albums/a", "/albums/missing", "/albums/c"]
+    assert all(call[2] is None for call in spotify.calls)
+
+
+@pytest.mark.anyio
+async def test_album_tracks_use_current_paginated_endpoint_and_tolerate_missing_fields() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "total": 2,
+                "items": [
+                    {
+                        "id": "track-1",
+                        "name": "First",
+                        "artists": [{"name": "Artist"}],
+                    },
+                    None,
+                ],
+            }
+        ]
+    )
+
+    result = await get_album_tracks(spotify, "spotify:album:a", limit=2, offset=5)
+
+    assert result.album_id == "a"
+    assert result.total == 2
+    assert result.tracks[0].duration_ms is None
+    assert spotify.calls == [("GET", "/albums/a/tracks", {"limit": 2, "offset": 5}, None)]
+
+
+@pytest.mark.anyio
+async def test_saved_albums_preserve_added_timestamp_and_paging() -> None:
+    spotify = FakeSpotify(
+        [{"total": 11, "items": [{"added_at": "2026-01-01T00:00:00Z", "album": album("a")}]}]
+    )
+
+    result = await get_saved_albums(spotify, limit=1, offset=10)
+
+    assert result.total == 11
+    assert result.albums[0].added_at == "2026-01-01T00:00:00Z"
+    assert result.albums[0].album.external_url == "https://open.spotify.com/album/a"
+    assert spotify.calls == [("GET", "/me/albums", {"limit": 1, "offset": 10}, None)]
+
+
+@pytest.mark.anyio
+async def test_album_contains_uses_shared_library_endpoint_and_exact_uris() -> None:
+    spotify = FakeSpotify([[True, False]])
+
+    result = await check_saved_albums(spotify, ["a", "spotify:album:b"])
+
+    assert result.saved == [True, False]
+    assert spotify.calls == [
+        (
+            "GET",
+            "/me/library/contains",
+            {"uris": "spotify:album:a,spotify:album:b"},
+            None,
+        )
+    ]
+
+
+@pytest.mark.anyio
+async def test_album_library_writes_verify_once_without_blind_retry() -> None:
+    spotify = FakeSpotify([None, [True, False], None, [False, True]])
+
+    saved = await save_albums(spotify, ["a", "b"])
+    removed = await remove_saved_albums(spotify, ["a", "b"])
+
+    assert saved.status == "mismatch"
+    assert saved.mismatches == ["b: expected saved=True, observed saved=False"]
+    assert removed.status == "mismatch"
+    assert removed.mismatches == ["b: expected saved=False, observed saved=True"]
+    assert [call[0] for call in spotify.calls] == ["PUT", "GET", "DELETE", "GET"]
+    assert all("/me/albums" not in call[1] for call in spotify.calls)
+
+
+@pytest.mark.anyio
+async def test_album_write_reports_failed_verification_as_ambiguous() -> None:
+    spotify = FakeSpotify([None, RuntimeError("read unavailable")])
+
+    result = await save_albums(spotify, ["a"])
+
+    assert result.status == "ambiguous"
+    assert result.warning == "Spotify accepted the write, but verification failed: read unavailable"
+    assert len(spotify.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_album_membership_rejects_short_evidence() -> None:
+    spotify = FakeSpotify([[]])
+
+    with pytest.raises(Exception, match="malformed album membership evidence"):
+        await check_saved_albums(spotify, ["a"])
+
+
+@pytest.mark.anyio
+async def test_album_write_reports_ambiguous_transport_without_verification() -> None:
+    from spotify_mcp.domain.errors import AmbiguousWrite
+
+    spotify = FakeSpotify([AmbiguousWrite("write outcome unknown")])
+
+    result = await remove_saved_albums(spotify, ["a"])
+
+    assert result.status == "ambiguous"
+    assert result.warning == "write outcome unknown"
+    assert len(spotify.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_album_tools_are_structured_snake_case_and_accurately_annotated() -> None:
+    server: MCPServer[AppContext] = MCPServer("test")
+    register(server)
+
+    tools = {tool.name: tool for tool in await server.list_tools()}
+
+    assert set(tools) == {
+        "spotify_albums",
+        "spotify_album_tracks",
+        "spotify_saved_albums",
+        "spotify_album_library_contains",
+        "spotify_album_library_save",
+        "spotify_album_library_remove",
+    }
+    assert all(tool.output_schema is not None for tool in tools.values())
+    assert tools["spotify_albums"].annotations.read_only_hint is True
+    assert tools["spotify_album_library_save"].annotations.idempotent_hint is True
+    remove_annotations = tools["spotify_album_library_remove"].annotations
+    assert remove_annotations.destructive_hint is True
+    assert remove_annotations.idempotent_hint is True
