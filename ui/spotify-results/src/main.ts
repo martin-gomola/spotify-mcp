@@ -26,17 +26,41 @@ const view = new SpotifyResultsView({
   },
 });
 
+let connected = false;
+let hasPendingPayload = false;
+let pendingPayload: unknown;
+
+function renderWhenConnected(payload: unknown): void {
+  if (!connected) {
+    pendingPayload = payload;
+    hasPendingPayload = true;
+    return;
+  }
+  void view.render(payload);
+}
+
+app.addEventListener("toolinput", (input) => {
+  renderWhenConnected(input.arguments);
+});
+
 app.addEventListener("toolresult", (result) => {
-  void view.render(result.structuredContent);
+  renderWhenConnected(result.structuredContent);
 });
 
 window.addEventListener("openai:set_globals", (event) => {
   const detail = (event as CustomEvent<{ globals?: { toolOutput?: unknown } }>).detail;
-  void view.render(detail?.globals?.toolOutput ?? window.openai?.toolOutput);
+  renderWhenConnected(detail?.globals?.toolOutput ?? window.openai?.toolOutput);
 });
 
 await app.connect();
+connected = true;
 
 if (window.openai?.toolOutput) {
   await view.render(window.openai.toolOutput);
+}
+if (hasPendingPayload) {
+  const payload = pendingPayload;
+  hasPendingPayload = false;
+  pendingPayload = undefined;
+  await view.render(payload);
 }
