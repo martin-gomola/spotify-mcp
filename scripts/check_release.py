@@ -33,6 +33,7 @@ def tool_names() -> set[str]:
         for value in python_strings(path):
             if value.startswith("spotify_") and re.fullmatch(r"spotify_[a-z0-9_]+", value):
                 names.add(value)
+    names.add("spotify_render_results")
     names.add("spotify_status")
     return names
 
@@ -77,8 +78,23 @@ def check_plugin(errors: list[str]) -> None:
     descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
     if descriptor.get("name") != "spotify-mcp":
         errors.append("plugin descriptor name must be spotify-mcp")
-    if descriptor.get("version") != "0.1.0":
-        errors.append("plugin descriptor version must match the initial 0.1.0 release")
+    package_version = re.search(
+        r'^version = "([^"]+)"$',
+        (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+        re.M,
+    )
+    expected_version = package_version.group(1) if package_version is not None else None
+    if descriptor.get("version") != expected_version:
+        errors.append("plugin descriptor version must match pyproject.toml")
+    package_init = (SOURCE / "__init__.py").read_text(encoding="utf-8")
+    if expected_version is None or f'__version__ = "{expected_version}"' not in package_init:
+        errors.append("spotify_mcp.__version__ must match pyproject.toml")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    if expected_version is None or f"## {expected_version}" not in changelog:
+        errors.append("CHANGELOG.md must contain the current project version")
+    prompts = descriptor.get("interface", {}).get("defaultPrompt", [])
+    if not isinstance(prompts, list) or not 1 <= len(prompts) <= 3:
+        errors.append("plugin descriptor must advertise between one and three default prompts")
 
     published_tools = tool_names()
     for skill_dir in sorted((PLUGIN / "skills").iterdir()):
@@ -118,9 +134,18 @@ def check_docs(errors: list[str]) -> None:
                 errors.append(f"{path.relative_to(ROOT)}: broken local link target: {target}")
 
     tool_catalog = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
+    expected_count = len(tool_names())
+    if f"exposes {expected_count} structured tools" not in tool_catalog:
+        errors.append(f"docs/tools.md: public tool count must be {expected_count}")
     undocumented = sorted(name for name in tool_names() if f"`{name}`" not in tool_catalog)
     if undocumented:
         errors.append(f"docs/tools.md: undocumented tools: {', '.join(undocumented)}")
+
+    ui_asset = SOURCE / "mcp_server" / "resources" / "spotify-results-v1.html"
+    if not ui_asset.is_file():
+        errors.append("MCP Apps result HTML asset is missing")
+    elif "ui/notifications/tool-result" not in ui_asset.read_text(encoding="utf-8"):
+        errors.append("MCP Apps result HTML does not handle tool result notifications")
 
 
 def check_local_startup(errors: list[str]) -> None:
@@ -134,6 +159,26 @@ def check_local_startup(errors: list[str]) -> None:
         re.M,
     ):
         errors.append("Makefile: run must connect when needed and then start stdio MCP")
+    if not re.search(
+        r"^setup:\n\t@uv run spotify-mcp connect\n\t@uv run spotify-mcp doctor$",
+        makefile,
+        re.M,
+    ):
+        errors.append("Makefile: setup must connect when needed, verify access, and exit")
+    codex_install = re.search(
+        r"^codex-install: setup\n(?P<body>(?:\t.*\n)+)",
+        makefile,
+        re.M,
+    )
+    if codex_install is None:
+        errors.append("Makefile: codex-install must depend on one-time setup")
+    else:
+        body = codex_install.group("body")
+        for expected in ("plugin marketplace add", "plugin marketplace upgrade", "plugin add"):
+            if expected not in body:
+                errors.append(f"Makefile: codex-install must support `{expected}`")
+    if not re.search(r"^codex-update: setup$", makefile, re.M):
+        errors.append("Makefile: codex-update must refresh Spotify scope requirements")
 
 
 def main() -> int:

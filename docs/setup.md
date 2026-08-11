@@ -58,21 +58,21 @@ The file is ignored by Git. A Spotify client ID is a public application identifi
 machine-specific configuration in `.env` makes startup simpler and avoids committing it by
 accident. Never add a client secret or OAuth token to `.env`.
 
-## Authenticate
+## Complete one-time setup
 
-For normal use, one command installs dependencies, connects when necessary, and starts stdio MCP:
+Connect when necessary and verify live Spotify access without leaving a server running:
 
 ```bash
-make run
+make setup
 ```
 
-On the first run, Spotify MCP opens the Spotify approval page and listens temporarily on
+On the first setup, Spotify MCP opens the Spotify approval page and listens temporarily on
 `127.0.0.1:8888` for the callback. After approval it saves renewable tokens in an OS-appropriate
-private configuration file and starts the server. Later `make run` calls reuse or refresh that
-grant without opening the browser.
+private configuration file. Later `make setup` calls reuse or refresh that grant, verify the account,
+and return to the shell without opening the browser.
 
-To authenticate without leaving the server running, use `make auth`. Verify live access with
-`make doctor`.
+Use `make auth` when you explicitly want to replace or reconnect the saved grant. Use `make doctor`
+for a standalone live-access check.
 
 To use a different loopback port, register the same URI in Spotify first and change the value in
 `.env`:
@@ -95,14 +95,17 @@ grant expires or is revoked, run the `auth` command again.
 
 ## Run the MCP server
 
-The default and recommended local transport is stdio:
+The default and recommended local transport is stdio. Use this command only for standalone clients
+or manual development:
 
 ```bash
 make run
 ```
 
-Do not wrap this command with anything that writes ordinary output to stdout; stdout carries the
-MCP protocol. Diagnostics belong on stderr.
+The command intentionally stays in the foreground because that terminal owns the stdio connection.
+Stop it with `Ctrl-C`. Do not run it separately for Codex—the plugin starts and stops its own server
+process. Do not wrap it with anything that writes ordinary output to stdout; stdout carries the MCP
+protocol and diagnostics belong on stderr.
 
 The CLI also exposes a loopback Streamable HTTP transport for local development:
 
@@ -132,21 +135,41 @@ If the checkout is elsewhere, set the absolute path before starting Codex:
 export SPOTIFY_MCP_REPO=/absolute/path/to/spotify-mcp
 ```
 
-Install the public Git-backed marketplace and enable its plugin:
+From the configured checkout, one command completes Spotify setup, installs or refreshes the public
+marketplace, and enables the plugin:
+
+```bash
+make codex-install
+```
+
+The target is safe to repeat: it reuses valid Spotify authentication, upgrades an existing
+marketplace, and installs the plugin only when missing. Start a new Codex task afterward so Codex
+loads the MCP server and bundled skills. No Spotify terminal needs to remain open.
+
+The equivalent manual commands are:
 
 ```bash
 codex plugin marketplace add martin-gomola/spotify-mcp --ref main
 codex plugin add spotify-mcp@spotify-mcp
 ```
 
-Refresh future releases with:
+Refresh future releases, verify the loaded version, and then start a new Codex task:
 
 ```bash
-codex plugin marketplace upgrade spotify-mcp
+make codex-update
+```
+
+The update command also runs the connection check. If a release needs a new Spotify permission,
+it opens the PKCE authorization flow once so an older token cannot silently miss new tools.
+
+Remove the plugin and its marketplace when no longer needed:
+
+```bash
+codex plugin remove spotify-mcp@spotify-mcp
+codex plugin marketplace remove spotify-mcp
 ```
 
 The plugin contributes the MCP server plus setup, playlist-building, and library-audit skills.
-Run authentication from a terminal before asking Codex to use Spotify.
 
 The bundled `.mcp.json` deliberately contains no Spotify credentials. It only locates the checkout
 and starts the local process.
@@ -168,7 +191,7 @@ defaults.
 
 ### Client ID is missing
 
-Set `SPOTIFY_CLIENT_ID` in `.env`, then run `make run` or `make auth`. A client secret is neither
+Set `SPOTIFY_CLIENT_ID` in `.env`, then run `make setup` or `make auth`. A client secret is neither
 required nor accepted.
 
 ### Spotify rejects the redirect URI

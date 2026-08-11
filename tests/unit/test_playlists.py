@@ -69,6 +69,7 @@ async def test_playlist_reads_use_current_item_counts_and_items_endpoint() -> No
                         "name": "Road Trip",
                         "items": {"total": 26},
                         "public": False,
+                        "external_urls": {"spotify": "https://open.spotify.com/playlist/p1"},
                     }
                 ],
             },
@@ -83,6 +84,7 @@ async def test_playlist_reads_use_current_item_counts_and_items_endpoint() -> No
                             "name": "Track",
                             "artists": [{"name": "Artist"}],
                             "duration_ms": 100,
+                            "external_urls": {"spotify": "https://open.spotify.com/track/t1"},
                         }
                     },
                     {"item": None},
@@ -96,7 +98,10 @@ async def test_playlist_reads_use_current_item_counts_and_items_endpoint() -> No
     items = await get_playlist_items(spotify, "p1")
 
     assert playlists.playlists[0].item_count == 26
+    assert playlists.playlists[0].spotify_url == "https://open.spotify.com/playlist/p1"
     assert details.item_count == 26
+    assert details.spotify_url == "https://open.spotify.com/playlist/p1"
+    assert items.items[0].spotify_url == "https://open.spotify.com/track/t1"
     assert items.items[1].type == "unknown"
     assert spotify.calls[-1] == (
         "GET",
@@ -119,6 +124,7 @@ async def test_create_reports_visibility_mismatch_without_second_write() -> None
 
     assert result.status == "mismatch"
     assert result.visibility_status == "mismatch"
+    assert result.spotify_url == "https://open.spotify.com/playlist/p1"
     assert result.observed_public is True
     assert [call[0] for call in spotify.calls] == ["POST", "GET"]
 
@@ -130,6 +136,7 @@ async def test_update_verifies_each_requested_field_once() -> None:
     result = await update_playlist(spotify, "p1", name="New", public=False)
 
     assert result.status == "mismatch"
+    assert result.spotify_url == "https://open.spotify.com/playlist/p1"
     assert result.mismatches == ["name: requested 'New', observed 'Old'"]
     assert [call[0] for call in spotify.calls] == ["PUT", "GET"]
 
@@ -199,6 +206,7 @@ async def test_add_returns_accepted_snapshot_and_preserves_episode_uri() -> None
 
     assert result.status == "accepted"
     assert result.snapshot_id == "snap-2"
+    assert result.spotify_url == "https://open.spotify.com/playlist/p1"
     assert spotify.calls[0] == (
         "POST",
         "/playlists/p1/items",

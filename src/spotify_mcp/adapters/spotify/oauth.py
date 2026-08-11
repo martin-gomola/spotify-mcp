@@ -41,6 +41,7 @@ REQUIRED_SCOPES: tuple[str, ...] = (
     "user-library-read",
     "user-library-modify",
     "user-read-recently-played",
+    "user-read-playback-position",
     "user-top-read",
 )
 
@@ -207,6 +208,7 @@ class SpotifyOAuth:
         tokens = self.token_store.load()
         if tokens is None:
             raise AuthenticationRequired("Spotify is not authenticated; run `spotify-mcp auth`.")
+        _require_scopes(tokens)
         if not tokens.is_expiring(now=self._clock()):
             return tokens.access_token
 
@@ -216,9 +218,11 @@ class SpotifyOAuth:
                 raise AuthenticationRequired(
                     "Spotify is not authenticated; run `spotify-mcp auth`."
                 )
+            _require_scopes(current)
             if not current.is_expiring(now=self._clock()):
                 return current.access_token
             refreshed = await self.refresh(current)
+            _require_scopes(refreshed)
             self.token_store.save(refreshed)
             return refreshed.access_token
 
@@ -233,6 +237,9 @@ class SpotifyOAuth:
             }
         )
         tokens = self._tokens_from_payload(payload)
+        if tokens.scope is None:
+            tokens = replace(tokens, scope=" ".join(REQUIRED_SCOPES))
+        _require_scopes(tokens)
         self.token_store.save(tokens)
         return tokens
 
@@ -249,6 +256,8 @@ class SpotifyOAuth:
         refreshed = self._tokens_from_payload(payload)
         if refreshed.refresh_token is None:
             refreshed = replace(refreshed, refresh_token=tokens.refresh_token)
+        if refreshed.scope is None:
+            refreshed = replace(refreshed, scope=tokens.scope)
         return refreshed
 
     async def authorize(
@@ -334,6 +343,16 @@ def _timeout(settings: SpotifySettings) -> httpx.Timeout:
         write=settings.read_timeout_seconds,
         pool=settings.connect_timeout_seconds,
     )
+
+
+def _require_scopes(tokens: TokenSet) -> None:
+    granted = set(tokens.scope.split()) if tokens.scope else set()
+    missing = sorted(set(REQUIRED_SCOPES) - granted)
+    if missing:
+        raise AuthenticationRequired(
+            "Spotify authorization is missing required scopes: "
+            f"{', '.join(missing)}. Run `spotify-mcp connect` to authorize again."
+        )
 
 
 def _wait_for_loopback_callback(redirect_uri: str, timeout_seconds: float) -> str:

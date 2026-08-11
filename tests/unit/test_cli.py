@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from spotify_mcp.adapters.spotify.oauth import TokenSet
-from spotify_mcp.cli import _connect
+from spotify_mcp.adapters.spotify.oauth import REQUIRED_SCOPES, TokenSet, TokenStore
+from spotify_mcp.cli import _connect, _doctor
 from spotify_mcp.config import SpotifySettings
 from spotify_mcp.domain.errors import AuthenticationRequired
 
@@ -53,6 +53,22 @@ async def test_connect_authenticates_only_when_needed(
     output = capsys.readouterr().out
     assert ("already_connected" in output) is authenticated
     assert ("connected" in output) is True
+
+
+@pytest.mark.anyio
+async def test_doctor_rejects_token_missing_current_required_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = SpotifySettings(client_id="client", token_path=tmp_path / "tokens.json")
+    old_scopes = " ".join(
+        scope for scope in REQUIRED_SCOPES if scope != "user-read-playback-position"
+    )
+    TokenStore(settings.token_path).save(TokenSet("access", "refresh", 10_000.0, old_scopes))
+    monkeypatch.setattr("spotify_mcp.cli.load_settings", lambda: settings)
+
+    with pytest.raises(AuthenticationRequired, match="user-read-playback-position"):
+        await _doctor()
 
 
 @pytest.fixture

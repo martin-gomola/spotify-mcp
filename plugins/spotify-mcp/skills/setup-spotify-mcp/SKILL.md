@@ -12,9 +12,11 @@ approval that cannot be obtained locally.
 2. Ensure the ignored `.env` file contains `SPOTIFY_CLIENT_ID`; copy `.env.example` when needed.
 3. If no client ID is configured, explain how to create a Spotify Web API app and register exactly
    `http://127.0.0.1:8888/callback`. Ask for the client ID only; PKCE needs no client secret.
-4. Run `make auth`. Let the user approve the Spotify browser page.
-5. Run `make doctor` and verify the MCP process can list its tools. Use `make run` for ordinary
-   standalone startup; it authenticates automatically only when the saved grant is unavailable.
+4. Run `make setup`. Let the user approve the Spotify browser page when authentication is missing,
+   then verify the reported account is ready.
+5. For Codex installation or repair, run `make codex-install` and tell the user to start a new task.
+   Codex owns the stdio process; do not leave `make run` open. Use `make run` only for standalone
+   manual startup, where the foreground terminal intentionally remains attached.
 6. Report the concrete result. Never paste tokens, authorization codes, or credential-file content.
 
 Spotify Development Mode requires the app owner to have Premium and currently limits allow-listed

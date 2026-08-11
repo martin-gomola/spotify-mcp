@@ -42,6 +42,7 @@ def test_pkce_authorization_url_has_s256_challenge_and_required_scopes(tmp_path:
     assert query["code_challenge_method"] == ["S256"]
     assert query["code_challenge"] == [challenge]
     assert set(query["scope"][0].split()) == set(REQUIRED_SCOPES)
+    assert "user-read-playback-position" in REQUIRED_SCOPES
 
 
 def test_callback_requires_matching_state_and_code() -> None:
@@ -99,6 +100,7 @@ def test_exchange_uses_public_client_pkce_without_client_secret(tmp_path: Path) 
             oauth = SpotifyOAuth(_settings(tmp_path), http_client=client, clock=lambda: 100.0)
             tokens = await oauth.exchange_code("code", code_verifier="verifier")
             assert tokens.expires_at == 160.0
+            assert set((tokens.scope or "").split()) == set(REQUIRED_SCOPES)
 
     asyncio.run(scenario())
     assert captured["client_id"] == ["client"]
@@ -109,7 +111,8 @@ def test_exchange_uses_public_client_pkce_without_client_secret(tmp_path: Path) 
 def test_concurrent_expired_token_reads_share_one_refresh(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     store = TokenStore(settings.token_path)
-    store.save(TokenSet("old", "refresh", 0.0))
+    granted_scopes = " ".join(REQUIRED_SCOPES)
+    store.save(TokenSet("old", "refresh", 0.0, granted_scopes))
     calls = 0
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -132,7 +135,29 @@ def test_concurrent_expired_token_reads_share_one_refresh(tmp_path: Path) -> Non
 
     asyncio.run(scenario())
     assert calls == 1
-    assert store.load() == TokenSet("new", "refresh", 3700.0)
+    assert store.load() == TokenSet("new", "refresh", 3700.0, granted_scopes)
+
+
+def test_existing_token_missing_new_scope_requires_authorization_upgrade(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    store = TokenStore(settings.token_path)
+    old_scopes = " ".join(
+        scope for scope in REQUIRED_SCOPES if scope != "user-read-playback-position"
+    )
+    store.save(TokenSet("access", "refresh", 10_000.0, old_scopes))
+
+    async def scenario() -> None:
+        oauth = SpotifyOAuth(settings, token_store=store, clock=lambda: 100.0)
+        try:
+            with pytest.raises(
+                AuthenticationRequired,
+                match=r"user-read-playback-position.*spotify-mcp connect",
+            ):
+                await oauth.ensure_access_token()
+        finally:
+            await oauth.aclose()
+
+    asyncio.run(scenario())
 
 
 def test_invalid_grant_clears_saved_token(tmp_path: Path) -> None:

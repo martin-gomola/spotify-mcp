@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import anyio
 from pydantic import BaseModel, ConfigDict, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
+from spotify_mcp.domain.links import spotify_uri, spotify_url_from_uri, spotify_web_url
 
 PlayableType = Literal["track", "album", "artist", "playlist"]
 QueueableType = Literal["track", "episode"]
@@ -39,6 +40,7 @@ class PlaybackItem(Model):
     type: PlaybackItemType
     id: str | None = None
     uri: str | None = None
+    spotify_url: str | None = None
     name: str
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
@@ -65,6 +67,7 @@ class PlaybackResult(Model):
     status: Literal["accepted"] = "accepted"
     device_id: str | None = None
     uri: str | None = None
+    spotify_url: str | None = None
     volume_percent: int | None = None
 
 
@@ -126,10 +129,18 @@ def _playback_item(value: Any) -> PlaybackItem | None:
         item_type = "episode"
     else:
         item_type = "unknown"
+    item_id = _string(item.get("id"))
+    uri = _string(item.get("uri"))
+    external_url = _string(_mapping(item.get("external_urls")).get("spotify"))
+    linked_type = item_type if item_type != "unknown" else None
+    linked_value = uri or item_id
     return PlaybackItem(
         type=item_type,
-        id=_string(item.get("id")),
-        uri=_string(item.get("uri")),
+        id=item_id,
+        uri=uri,
+        spotify_url=spotify_web_url(linked_type, linked_value, external_url=external_url)
+        if linked_type is not None and linked_value is not None
+        else None,
         name=_string(item.get("name")) or "Unknown item",
         artists=_artist_names(item.get("artists")),
         album=_string(_mapping(item.get("album")).get("name")),
@@ -206,7 +217,12 @@ class PlaybackService:
         await self._spotify.request(
             "PUT", "/me/player/play", params={"device_id": device}, json=body
         )
-        return PlaybackResult(operation="play", device_id=device, uri=resolved_uri)
+        return PlaybackResult(
+            operation="play",
+            device_id=device,
+            uri=resolved_uri,
+            spotify_url=spotify_url_from_uri(resolved_uri),
+        )
 
     async def resume(self, *, device_id: str | None = None) -> PlaybackResult:
         device = await self._ensure_active_device(device_id)
@@ -243,7 +259,12 @@ class PlaybackService:
             "/me/player/queue",
             params={"uri": resolved_uri, "device_id": device},
         )
-        return PlaybackResult(operation="add_to_queue", device_id=device, uri=resolved_uri)
+        return PlaybackResult(
+            operation="add_to_queue",
+            device_id=device,
+            uri=resolved_uri,
+            spotify_url=spotify_url_from_uri(resolved_uri),
+        )
 
     async def set_volume(
         self, volume_percent: int, *, device_id: str | None = None
@@ -318,8 +339,14 @@ class PlaybackService:
 
     @staticmethod
     def _resolve_uri(uri: str | None, item_type: PlayableType | None, item_id: str | None) -> str:
+        if uri is not None and uri.strip().startswith("spotify:episode:"):
+            episode_url = spotify_web_url("episode", uri)
+            raise ValueError(
+                "spotify_play does not support direct episode playback; use "
+                f"spotify_add_to_queue or open {episode_url}"
+            )
         resolved = uri or (
-            f"spotify:{item_type}:{item_id}" if item_type is not None and item_id else None
+            spotify_uri(item_type, item_id) if item_type is not None and item_id else None
         )
         if resolved is None:
             raise ValueError("provide uri or both item_type and item_id")
@@ -327,27 +354,21 @@ class PlaybackService:
         if (
             len(parts) != 3
             or parts[0] != "spotify"
-            or parts[1]
-            not in {
-                "track",
-                "album",
-                "artist",
-                "playlist",
-            }
+            or parts[1] not in {"track", "album", "artist", "playlist"}
         ):
             raise ValueError("uri must be a Spotify track, album, artist, or playlist URI")
-        return resolved
+        return spotify_uri(cast(PlayableType, parts[1]), resolved)
 
     @staticmethod
     def _resolve_queue_uri(
         uri: str | None, item_type: QueueableType | None, item_id: str | None
     ) -> str:
         resolved = uri or (
-            f"spotify:{item_type}:{item_id}" if item_type is not None and item_id else None
+            spotify_uri(item_type, item_id) if item_type is not None and item_id else None
         )
         if resolved is None:
             raise ValueError("provide uri or both item_type and item_id")
         parts = resolved.split(":", maxsplit=2)
         if len(parts) != 3 or parts[0] != "spotify" or parts[1] not in {"track", "episode"}:
             raise ValueError("queue uri must be a Spotify track or episode URI")
-        return resolved
+        return spotify_uri(cast(QueueableType, parts[1]), resolved)

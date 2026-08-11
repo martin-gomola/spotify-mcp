@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
 from spotify_mcp.domain.errors import AmbiguousWrite, SpotifyRequestError
+from spotify_mcp.domain.links import spotify_web_url
 
 MAX_PAGE_SIZE = 50
 MAX_LIBRARY_ITEMS_PER_WRITE = 40
@@ -22,6 +23,7 @@ class Track(BaseModel):
 
     id: str
     uri: str | None = None
+    spotify_url: str | None = None
     name: str
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
@@ -91,9 +93,17 @@ def _track(raw: Any) -> Track | None:
     explicit = data.get("explicit")
     popularity = data.get("popularity")
     uri = data.get("uri")
+    external_urls = _mapping(data.get("external_urls"))
     return Track(
         id=track_id,
         uri=uri if isinstance(uri, str) else None,
+        spotify_url=spotify_web_url(
+            "track",
+            track_id,
+            external_url=external_urls.get("spotify")
+            if isinstance(external_urls.get("spotify"), str)
+            else None,
+        ),
         name=name,
         artists=artists,
         album=album if isinstance(album, str) else None,

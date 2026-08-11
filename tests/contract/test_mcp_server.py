@@ -7,6 +7,7 @@ from mcp.types import Tool, ToolAnnotations
 
 from spotify_mcp.config import SpotifyConfigError, SpotifySettings
 from spotify_mcp.mcp_server.server import create_server
+from spotify_mcp.mcp_server.ui import RESULTS_UI_URI
 
 PUBLIC_TOOLS = {
     "spotify_add_to_queue",
@@ -32,6 +33,10 @@ PUBLIC_TOOLS = {
     "spotify_now_playing",
     "spotify_pause",
     "spotify_play",
+    "spotify_podcast_discover",
+    "spotify_podcast_episode",
+    "spotify_podcast_show",
+    "spotify_podcast_show_episodes",
     "spotify_playlist",
     "spotify_playlist_add",
     "spotify_playlist_create",
@@ -44,10 +49,14 @@ PUBLIC_TOOLS = {
     "spotify_playlists",
     "spotify_previous",
     "spotify_queue",
+    "spotify_render_results",
     "spotify_recently_played",
+    "spotify_taste_recommendations",
     "spotify_resume",
     "spotify_sample_liked_songs",
     "spotify_saved_albums",
+    "spotify_saved_episodes",
+    "spotify_saved_shows",
     "spotify_saved_tracks",
     "spotify_search",
     "spotify_set_volume",
@@ -83,8 +92,12 @@ async def test_public_mcp_v2_contract(
 
         listing = await client.list_tools()
         tools = {tool.name: tool for tool in listing.tools}
+        resources = {
+            str(resource.uri): resource for resource in (await client.list_resources()).resources
+        }
 
         assert set(tools) == PUBLIC_TOOLS
+        assert resources[RESULTS_UI_URI].mime_type == "text/html;profile=mcp-app"
         for tool in tools.values():
             assert tool.output_schema is not None, tool.name
             assert tool.output_schema.get("type") == "object", tool.name
@@ -131,6 +144,13 @@ async def test_public_mcp_v2_contract(
         assert sort_annotations.read_only_hint is False
         assert sort_annotations.destructive_hint is True
         assert sort_annotations.idempotent_hint is False
+
+        render_annotations = _annotations(tools["spotify_render_results"])
+        assert render_annotations.read_only_hint is True
+        assert tools["spotify_render_results"].meta == {
+            "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["model"]},
+            "openai/outputTemplate": RESULTS_UI_URI,
+        }
 
         status = await client.call_tool("spotify_status", {})
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
 from spotify_mcp.domain.errors import AmbiguousWrite, SpotifyRequestError
+from spotify_mcp.domain.links import spotify_web_url
 
 MAX_ALBUM_LOOKUPS = 20
 MAX_LIBRARY_URIS = 40
@@ -20,6 +21,7 @@ LOOKUP_CONCURRENCY = 5
 class Album(BaseModel):
     id: str
     uri: str | None = None
+    spotify_url: str | None = None
     name: str
     artists: list[str] = Field(default_factory=list)
     album_type: str | None = None
@@ -37,6 +39,7 @@ class AlbumsResult(BaseModel):
 class AlbumTrack(BaseModel):
     id: str
     uri: str | None = None
+    spotify_url: str | None = None
     name: str
     artists: list[str] = Field(default_factory=list)
     duration_ms: int | None = Field(default=None, ge=0)
@@ -130,6 +133,9 @@ def _album(value: Any) -> Album | None:
     return Album(
         id=album_id,
         uri=_string(data.get("uri")),
+        spotify_url=spotify_web_url(
+            "album", album_id, external_url=_string(external_urls.get("spotify"))
+        ),
         name=name,
         artists=_artist_names(data.get("artists")),
         album_type=_string(data.get("album_type")),
@@ -149,9 +155,13 @@ def _album_track(value: Any) -> AlbumTrack | None:
     disc_number = _integer(data.get("disc_number"))
     track_number = _integer(data.get("track_number"))
     explicit = data.get("explicit")
+    external_urls = _mapping(data.get("external_urls"))
     return AlbumTrack(
         id=track_id,
         uri=_string(data.get("uri")),
+        spotify_url=spotify_web_url(
+            "track", track_id, external_url=_string(external_urls.get("spotify"))
+        ),
         name=name,
         artists=_artist_names(data.get("artists")),
         duration_ms=duration_ms if duration_ms is None or duration_ms >= 0 else None,

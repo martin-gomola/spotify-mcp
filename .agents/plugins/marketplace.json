@@ -5,7 +5,10 @@
     {
       "name": "spotify-mcp",
       "source": { "source": "local", "path": "./plugins/spotify-mcp" },
-      "policy": { "installation": "AVAILABLE" },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
       "category": "Productivity"
     }
   ]

@@ -60,6 +60,7 @@ async def test_albums_use_singular_endpoint_and_report_unknown_ids() -> None:
     result = await get_albums(spotify, ["a", "missing", "spotify:album:c"])
 
     assert [item.id for item in result.albums] == ["a", "c"]
+    assert result.albums[0].spotify_url == "https://open.spotify.com/album/a"
     assert result.missing_ids == ["missing"]
     assert [call[1] for call in spotify.calls] == ["/albums/a", "/albums/missing", "/albums/c"]
     assert all(call[2] is None for call in spotify.calls)
@@ -76,6 +77,7 @@ async def test_album_tracks_use_current_paginated_endpoint_and_tolerate_missing_
                         "id": "track-1",
                         "name": "First",
                         "artists": [{"name": "Artist"}],
+                        "external_urls": {"spotify": "https://open.spotify.com/track/track-1"},
                     },
                     None,
                 ],
@@ -88,6 +90,7 @@ async def test_album_tracks_use_current_paginated_endpoint_and_tolerate_missing_
     assert result.album_id == "a"
     assert result.total == 2
     assert result.tracks[0].duration_ms is None
+    assert result.tracks[0].spotify_url == "https://open.spotify.com/track/track-1"
     assert spotify.calls == [("GET", "/albums/a/tracks", {"limit": 2, "offset": 5}, None)]
 
 

@@ -1,6 +1,6 @@
 # Tool catalog
 
-Spotify MCP exposes 45 structured tools. Asterisks in the input column mark required fields; all
+Spotify MCP exposes 53 structured tools. Asterisks in the input column mark required fields; all
 other inputs are optional and use the defaults shown below.
 
 ## Status and discovery
@@ -15,6 +15,35 @@ other inputs are optional and use the defaults shown below.
 
 Search returns at most ten items per call even when Spotify reports a larger total. Increase
 `offset` to request another page.
+
+Primary Spotify entities include a canonical `spotify_url` such as
+`https://open.spotify.com/track/...`. Clients can show these as links even when they do not support
+the optional interactive result view.
+
+## Taste rediscovery
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_taste_recommendations` | `limit=20` | Spotify reads + local deterministic ranking | Build up to 50 rediscovery suggestions from medium-term top tracks, recent plays, and a stratified Liked Songs sample. |
+
+This tool reports `curation=local-deterministic` and `is_spotify_recommendation=false`. Its output
+is reproducible from the observed source signals; it does not call Spotify's retired
+recommendations endpoint and must not be described as Spotify-native personalization.
+
+## Podcasts
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_podcast_discover` | `query*`, `limit=10`, `offset=0` | Spotify read | Search podcast shows and episodes together with canonical Spotify links. |
+| `spotify_podcast_show` | `show_id*` | Spotify read | Return typed metadata for one exact show. |
+| `spotify_podcast_show_episodes` | `show_id*`, `limit=20`, `offset=0` | Spotify read | Return one bounded page of episodes for a show. |
+| `spotify_podcast_episode` | `episode_id*` | Spotify read | Return one exact episode. Preview evidence can be absent and no full audio is returned. |
+| `spotify_saved_shows` | `limit=20`, `offset=0` | Spotify read | Return one page of shows saved by the current user. |
+| `spotify_saved_episodes` | `limit=20`, `offset=0` | Spotify read | Return one page of episodes saved by the current user. |
+
+Spotify's documented playback endpoint does not accept podcast episodes for direct start. Use
+`spotify_add_to_queue` for an episode or open its `spotify_url` in Spotify. The server does not
+pretend that an accepted track-play request proves unsupported episode playback.
 
 ## Playback
 
@@ -124,6 +153,16 @@ deprecated alias `dj`, `ascending`, and `descending`. It previews by default. Wi
 If `expected_snapshot_id` is omitted from `spotify_dj_apply`, the plan's source snapshot is used.
 Restore always requires the currently expected snapshot explicitly. Keep `dry_run=true` until the
 preview, live snapshot, and target order are acceptable.
+
+## Optional result presentation
+
+| Tool | Inputs | Effect | Purpose |
+| --- | --- | --- | --- |
+| `spotify_render_results` | `title*`, `items*` | Local read-only presentation | Render 1–50 already-selected Spotify entities as compact clickable cards in clients that support MCP Apps. |
+
+Call the relevant data tools first, then pass only the final display-ready entities to
+`spotify_render_results`. The renderer performs no Spotify or third-party request. Clients without
+MCP Apps support still receive the same structured JSON and text fallback.
 
 ## Safety and result states
 

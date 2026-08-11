@@ -1,7 +1,8 @@
-# Spotify MCP for Codex
+# MCP tools for Spotify in Codex
 
-Use Spotify naturally from Codex: search and control playback, rediscover music across Liked Songs,
-build verified playlists, audit saved recordings, and plan snapshot-safe DJ running orders.
+Use Spotify naturally from Codex: search music and podcasts, control playback, rediscover music
+across Liked Songs, build verified playlists, and plan snapshot-safe DJ running orders. Results
+include canonical Spotify links and can appear as compact cards in clients with MCP Apps support.
 
 The MCP server runs locally. Spotify OAuth tokens stay outside both the plugin and repository, and
 PKCE does not require a client secret.
@@ -16,15 +17,16 @@ PKCE does not require a client secret.
    http://127.0.0.1:8888/callback
    ```
 
-4. Authenticate and verify access:
+4. Complete the one-time setup and install the plugin:
 
    ```bash
-   make auth
-   make doctor
+   make codex-install
    ```
 
-For standalone use, `make run` performs first-time authentication when needed and then starts the
-stdio server.
+The command connects Spotify when needed, verifies access, and installs or refreshes the plugin.
+Start a new Codex task afterward. Codex starts and stops the stdio server itself, so no terminal
+needs to remain open. For standalone development only, `make run` starts a foreground server that
+stays attached to its terminal until `Ctrl-C`.
 
 See the complete [setup guide](../../docs/setup.md) for Spotify Development Mode and troubleshooting.
 
@@ -43,6 +45,8 @@ export SPOTIFY_MCP_REPO=/absolute/path/to/spotify-mcp
 - “Build a road-trip playlist from across my Liked Songs history.”
 - “Audit my Liked Songs and show possible alternate recordings without changing anything.”
 - “What is playing, and what is next in my queue?”
+- “Find podcasts about design and show the best episodes as clickable cards.”
+- “Rediscover music from my taste without calling it a Spotify recommendation.”
 - “Plan a DJ running order that peaks late, but do not apply it.”
 - “Audit this whole playlist, then preview a BPM and energy sort.”
 
@@ -60,3 +64,8 @@ The plugin includes dedicated skills for initial setup, playlist building, and L
   authenticated users.
 
 See the [tool catalog](../../docs/tools.md) for exact capabilities and result states.
+
+For personal text or audio uploads, use Spotify's official
+[Save to Spotify](https://github.com/spotify/save-to-spotify) CLI as a separately installed
+companion. It has its own authorization grant and token store; this plugin does not bundle it or
+share credentials with it.

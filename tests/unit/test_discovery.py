@@ -7,6 +7,7 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from spotify_mcp.application.discovery import DiscoveryService
+from spotify_mcp.domain.links import SpotifyEntityType, spotify_web_url
 from spotify_mcp.mcp_server.context import AppContext
 from spotify_mcp.mcp_server.tools.discovery import register
 
@@ -52,6 +53,7 @@ async def test_search_uses_current_endpoint_and_caps_results() -> None:
     result = await DiscoveryService(spotify).search("road", "track", limit=10, offset=20)
 
     assert result.items[0].artists == ["Driver"]
+    assert result.items[0].spotify_url == "https://open.spotify.com/track/track-1"
     assert result.items[0].duration_ms is None
     assert spotify.calls == [
         (
@@ -61,6 +63,69 @@ async def test_search_uses_current_endpoint_and_caps_results() -> None:
             None,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "entity_type",
+    ["track", "album", "artist", "playlist", "episode", "show"],
+)
+def test_spotify_url_supports_public_entity_types(entity_type: SpotifyEntityType) -> None:
+    assert spotify_web_url(entity_type, f"{entity_type}-1") == (
+        f"https://open.spotify.com/{entity_type}/{entity_type}-1"
+    )
+
+
+def test_spotify_url_normalises_uris_and_rejects_invalid_ids() -> None:
+    assert spotify_web_url("episode", "spotify:episode:episode-1") == (
+        "https://open.spotify.com/episode/episode-1"
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        spotify_web_url("track", "spotify:album:album-1")
+    with pytest.raises(ValueError, match="invalid"):
+        spotify_web_url("show", "bad/id")
+    with pytest.raises(ValueError, match="must not be empty"):
+        spotify_web_url("artist", "  ")
+
+
+@pytest.mark.anyio
+async def test_search_links_podcast_entities_and_rejects_invalid_external_urls() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "shows": {
+                    "items": [
+                        {
+                            "id": "show-1",
+                            "name": "Road Stories",
+                            "external_urls": {"spotify": "https://example.test/not-spotify/show-1"},
+                        }
+                    ]
+                }
+            },
+            {
+                "episodes": {
+                    "items": [
+                        {
+                            "id": "episode-1",
+                            "uri": "spotify:episode:episode-1",
+                            "name": "The Long Drive",
+                            "external_urls": {
+                                "spotify": "https://open.spotify.com/episode/episode-1"
+                            },
+                        }
+                    ]
+                }
+            },
+        ]
+    )
+    service = DiscoveryService(spotify)
+
+    show = await service.search("road", "show")
+    episode = await service.search("drive", "episode")
+
+    assert show.items[0].spotify_url == "https://open.spotify.com/show/show-1"
+    assert episode.items[0].spotify_url == "https://open.spotify.com/episode/episode-1"
 
 
 @pytest.mark.anyio

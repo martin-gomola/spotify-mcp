@@ -48,6 +48,7 @@ def saved_item(track_id: str, added_at: str = "2026-01-01T00:00:00Z") -> dict[st
             "artists": [{"name": "Artist"}],
             "album": {"name": "Album"},
             "duration_ms": 123_000,
+            "external_urls": {"spotify": f"https://open.spotify.com/track/{track_id}"},
         },
     }
 
@@ -60,6 +61,7 @@ async def test_saved_tracks_page_uses_paging_and_keeps_library_positions() -> No
 
     assert result.total == 80
     assert result.tracks[0].library_position == 51
+    assert result.tracks[0].spotify_url == "https://open.spotify.com/track/a"
     assert result.warnings == ["Skipped unavailable item at Liked Songs position 52"]
     assert spotify.calls == [("GET", "/me/tracks", {"limit": 2, "offset": 50}, None)]
 

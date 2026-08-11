@@ -50,8 +50,10 @@ async def test_now_playing_handles_episode_and_missing_optional_fields() -> None
                 "item": {
                     "type": "episode",
                     "id": "episode-1",
+                    "uri": "spotify:episode:episode-1",
                     "name": "The Long Drive",
                     "show": {"name": "Road Stories"},
+                    "external_urls": {"spotify": "https://open.spotify.com/episode/episode-1"},
                 },
             }
         ]
@@ -64,6 +66,7 @@ async def test_now_playing_handles_episode_and_missing_optional_fields() -> None
     assert result.item is not None
     assert result.item.type == "episode"
     assert result.item.show == "Road Stories"
+    assert result.item.spotify_url == "https://open.spotify.com/episode/episode-1"
     assert spotify.calls == [("GET", "/me/player", None, None)]
 
 
@@ -99,6 +102,7 @@ async def test_play_track_targets_active_device_with_current_request_shape() -> 
 
     assert result.operation == "play"
     assert result.device_id == "device-1"
+    assert result.spotify_url == "https://open.spotify.com/track/track-1"
     assert spotify.calls[-1] == (
         "PUT",
         "/me/player/play",
@@ -138,6 +142,7 @@ async def test_queue_and_volume_send_typed_current_requests() -> None:
     volume = await service.set_volume(65)
 
     assert queued.uri == "spotify:episode:episode-1"
+    assert queued.spotify_url == "https://open.spotify.com/episode/episode-1"
     assert volume.volume_percent == 65
     assert spotify.calls[1] == (
         "POST",
@@ -254,6 +259,16 @@ async def test_playback_validation_prevents_invalid_writes() -> None:
         await service.add_to_queue(uri="spotify:playlist:not-queueable")
     with pytest.raises(ValueError, match="between 0 and 100"):
         await service.set_volume(101)
+
+    assert spotify.calls == []
+
+
+@pytest.mark.anyio
+async def test_play_rejects_episode_with_queue_and_open_url_guidance() -> None:
+    spotify = FakeSpotify([])
+
+    with pytest.raises(ValueError, match=r"add_to_queue.*open\.spotify\.com/episode/episode-1"):
+        await PlaybackService(spotify).play(uri="spotify:episode:episode-1")
 
     assert spotify.calls == []
 

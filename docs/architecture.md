@@ -17,6 +17,11 @@ MCP tools -> application use cases -> domain models and algorithms
 - `mcp_server` is a thin typed transport. MCP SDK v2 derives input and output schemas from Python
   annotations and Pydantic models.
 
+The optional MCP Apps extension is deliberately separate from data acquisition. Normal tools
+return typed data and canonical Spotify URLs first; `spotify_render_results` only presents a final
+selection from that data. Its packaged HTML has no external dependencies and clients without Apps
+support keep the structured JSON and text fallback.
+
 `bootstrap.py` is the composition root. One async HTTP client and the local repositories live for
 the MCP server lifespan; tool modules never create hidden global clients.
 
@@ -28,3 +33,4 @@ the MCP server lifespan; tool modules never create hidden global clients.
 - Playlist item writes require Spotify snapshot evidence or return `ambiguous`.
 - Destructive tools require exact Spotify URIs and advertise destructive MCP annotations.
 - DJ application checks the live snapshot and observable order before the first write.
+- Presentation accepts only canonical `https://open.spotify.com/{type}/{id}` entity URLs.

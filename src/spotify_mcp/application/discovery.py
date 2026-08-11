@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
+from spotify_mcp.domain.links import SpotifyEntityType, spotify_web_url
 
 SearchType = Literal["track", "album", "artist", "playlist", "episode", "show"]
 TimeRange = Literal["short_term", "medium_term", "long_term"]
@@ -23,6 +24,7 @@ class Track(Model):
     id: str
     name: str
     uri: str | None = None
+    spotify_url: str | None = None
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
     duration_ms: int | None = None
@@ -34,6 +36,7 @@ class Artist(Model):
     id: str
     name: str
     uri: str | None = None
+    spotify_url: str | None = None
     genres: list[str] | None = None
     popularity: int | None = None
 
@@ -43,6 +46,7 @@ class SearchItem(Model):
     id: str
     name: str
     uri: str | None = None
+    spotify_url: str | None = None
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
     owner: str | None = None
@@ -115,6 +119,11 @@ def _string_list(value: Any) -> list[str] | None:
     return [item for item in value if isinstance(item, str)]
 
 
+def _spotify_url(item: Mapping[str, Any], item_type: SpotifyEntityType, item_id: str) -> str:
+    external_url = _string(_mapping(item.get("external_urls")).get("spotify"))
+    return spotify_web_url(item_type, item_id, external_url=external_url)
+
+
 def _track(value: Any) -> Track | None:
     item = _mapping(value)
     track_id = _string(item.get("id"))
@@ -125,6 +134,7 @@ def _track(value: Any) -> Track | None:
         id=track_id,
         name=name,
         uri=_string(item.get("uri")),
+        spotify_url=_spotify_url(item, "track", track_id),
         artists=_artist_names(item.get("artists")),
         album=_string(_mapping(item.get("album")).get("name")),
         duration_ms=_integer(item.get("duration_ms")),
@@ -143,6 +153,7 @@ def _artist(value: Any) -> Artist | None:
         id=artist_id,
         name=name,
         uri=_string(item.get("uri")),
+        spotify_url=_spotify_url(item, "artist", artist_id),
         genres=_string_list(item.get("genres")),
         popularity=_integer(item.get("popularity")),
     )
@@ -255,6 +266,7 @@ class DiscoveryService:
             id=item_id,
             name=name,
             uri=_string(item.get("uri")),
+            spotify_url=_spotify_url(item, item_type, item_id),
             artists=_artist_names(item.get("artists")),
             album=_string(_mapping(item.get("album")).get("name")),
             owner=_string(_mapping(item.get("owner")).get("display_name")),

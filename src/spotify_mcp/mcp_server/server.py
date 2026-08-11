@@ -23,7 +23,10 @@ from spotify_mcp.mcp_server.tools import (
     library,
     playback,
     playlists,
+    podcasts,
+    recommendations,
 )
+from spotify_mcp.mcp_server.ui import create_results_apps
 
 
 class SpotifyStatus(BaseModel):
@@ -39,6 +42,7 @@ class SpotifyStatus(BaseModel):
 
 def create_server() -> MCPServer[AppContext]:
     instructions = (Path(__file__).with_name("instructions.md")).read_text(encoding="utf-8")
+    results_apps = create_results_apps()
     server = MCPServer[AppContext](
         name="spotify-mcp",
         title="Spotify MCP",
@@ -46,6 +50,7 @@ def create_server() -> MCPServer[AppContext]:
         instructions=instructions,
         version=__version__,
         lifespan=app_lifespan,
+        extensions=[results_apps],
     )
 
     @server.tool(
@@ -85,6 +90,8 @@ def create_server() -> MCPServer[AppContext]:
         dj,
         dj_audit,
         bpm_sort,
+        podcasts,
+        recommendations,
     ):
         module.register(server)
     return server

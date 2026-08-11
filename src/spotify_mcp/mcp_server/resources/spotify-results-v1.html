@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify results</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 12px;
+      background: transparent;
+      color: CanvasText;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 10px;
+    }
+    .mark {
+      width: 12px;
+      height: 12px;
+      border-radius: 4px;
+      background: #38bdf8;
+    }
+    h1 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.3;
+    }
+    #status {
+      margin: 18px 2px;
+      color: GrayText;
+      font-size: 13px;
+    }
+    #results {
+      display: grid;
+      gap: 8px;
+    }
+    article {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 11px;
+      border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+      border-radius: 12px;
+      background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
+    }
+    .copy {
+      min-width: 0;
+    }
+    .name {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .meta,
+    .reason {
+      margin: 3px 0 0;
+      color: GrayText;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 11px;
+      border-radius: 999px;
+      background: #38bdf8;
+      color: #082f49;
+      font-size: 12px;
+      font-weight: 750;
+      text-decoration: none;
+    }
+    a:focus-visible {
+      outline: 3px solid color-mix(in srgb, #38bdf8 60%, white);
+      outline-offset: 2px;
+    }
+    @media (max-width: 420px) {
+      article {
+        grid-template-columns: 1fr;
+      }
+      a {
+        justify-self: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="mark" aria-hidden="true"></span>
+    <h1 id="title">Spotify results</h1>
+  </header>
+  <p id="status">Preparing results...</p>
+  <main id="results" aria-live="polite"></main>
+  <script>
+    const titleEl = document.getElementById("title");
+    const statusEl = document.getElementById("status");
+    const resultsEl = document.getElementById("results");
+
+    function addText(parent, className, value) {
+      if (typeof value !== "string" || !value.trim()) return;
+      const element = document.createElement("p");
+      element.className = className;
+      element.textContent = value;
+      parent.appendChild(element);
+    }
+
+    function render(payload) {
+      const data = payload && typeof payload === "object" ? payload : {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      titleEl.textContent = typeof data.title === "string"
+        ? data.title
+        : "Spotify results";
+      resultsEl.replaceChildren();
+      statusEl.hidden = false;
+      statusEl.textContent = items.length
+        ? `${items.length} result${items.length === 1 ? "" : "s"}`
+        : "No display-ready results.";
+
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const card = document.createElement("article");
+        const copy = document.createElement("div");
+        copy.className = "copy";
+        addText(copy, "name", item.name);
+        const meta = [item.kind, item.subtitle]
+          .filter((value) => typeof value === "string" && value.trim())
+          .join(" - ");
+        addText(copy, "meta", meta);
+        addText(copy, "reason", item.reason);
+        card.appendChild(copy);
+
+        if (
+          typeof item.spotify_url === "string"
+          && item.spotify_url.startsWith("https://open.spotify.com/")
+        ) {
+          const link = document.createElement("a");
+          link.href = item.spotify_url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = item.kind === "episode"
+            ? "Open episode"
+            : "Open Spotify";
+          link.setAttribute(
+            "aria-label",
+            `Open ${item.name || "result"} in Spotify`,
+          );
+          card.appendChild(link);
+        }
+        resultsEl.appendChild(card);
+      }
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || message.jsonrpc !== "2.0") return;
+      if (message.method === "ui/notifications/tool-result") {
+        render(message.params?.structuredContent);
+      }
+    }, { passive: true });
+
+    window.addEventListener("openai:set_globals", (event) => {
+      render(event.detail?.globals?.toolOutput ?? window.openai?.toolOutput);
+    }, { passive: true });
+
+    if (window.openai?.toolOutput) render(window.openai.toolOutput);
+  </script>
+</body>
+</html>

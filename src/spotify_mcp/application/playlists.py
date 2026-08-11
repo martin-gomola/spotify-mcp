@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
 from spotify_mcp.domain.errors import AmbiguousWrite, SpotifyRequestError
+from spotify_mcp.domain.links import SpotifyEntityType, spotify_web_url
 
 MAX_PLAYLIST_ITEMS_PER_WRITE = 100
 MAX_PAGE_SIZE = 50
@@ -18,6 +19,7 @@ PlaylistUpdateField = Literal["name", "description", "public", "collaborative"]
 class PlaylistSummary(BaseModel):
     id: str
     name: str
+    spotify_url: str | None = None
     item_count: int | None = Field(default=None, ge=0)
     public: bool | None = None
     collaborative: bool = False
@@ -37,6 +39,7 @@ class PlaylistOwner(BaseModel):
 class PlaylistDetails(BaseModel):
     id: str
     name: str
+    spotify_url: str | None = None
     description: str
     owner: PlaylistOwner
     item_count: int | None = Field(default=None, ge=0)
@@ -51,6 +54,7 @@ class PlaylistItem(BaseModel):
     type: Literal["track", "episode", "unknown"]
     id: str | None = None
     uri: str | None = None
+    spotify_url: str | None = None
     name: str
     artists: list[str] = Field(default_factory=list)
     show: str | None = None
@@ -69,6 +73,7 @@ class PlaylistCreateResult(BaseModel):
     status: Literal["verified", "mismatch", "accepted", "ambiguous"]
     playlist_id: str | None = None
     playlist_url: str | None = None
+    spotify_url: str | None = None
     requested_public: bool
     observed_public: bool | None = None
     visibility_status: Literal["verified", "mismatch", "unknown"]
@@ -77,6 +82,7 @@ class PlaylistCreateResult(BaseModel):
 
 class PlaylistUpdateResult(BaseModel):
     playlist_id: str
+    spotify_url: str | None = None
     updated_fields: list[PlaylistUpdateField]
     status: Literal["verified", "mismatch", "ambiguous"]
     mismatches: list[str]
@@ -87,6 +93,7 @@ class PlaylistUpdateResult(BaseModel):
 class PlaylistSnapshotResult(BaseModel):
     operation: Literal["add-items", "remove-items", "reorder-items"]
     playlist_id: str
+    spotify_url: str | None = None
     item_count: int = Field(ge=1)
     status: Literal["accepted", "ambiguous"]
     snapshot_id: str | None = None
@@ -97,6 +104,7 @@ class PlaylistSnapshotResult(BaseModel):
 
 class PlaylistUnfollowResult(BaseModel):
     playlist_id: str
+    spotify_url: str | None = None
     status: Literal["verified", "mismatch", "ambiguous"]
     still_saved: bool | None = None
     warning: str | None = None
@@ -130,21 +138,39 @@ def _normalise_item_uris(values: Iterable[str]) -> list[str]:
     return uris
 
 
+def _entity_url(data: Mapping[str, Any], item_type: SpotifyEntityType, value: str) -> str:
+    external_urls = _mapping(data.get("external_urls"))
+    external_url = external_urls.get("spotify")
+    return spotify_web_url(
+        item_type,
+        value,
+        external_url=external_url if isinstance(external_url, str) else None,
+    )
+
+
+def _optional_entity_url(
+    data: Mapping[str, Any], item_type: SpotifyEntityType, value: str | None
+) -> str | None:
+    return _entity_url(data, item_type, value) if value is not None else None
+
+
 def _metadata(raw: Any, requested_id: str) -> tuple[PlaylistDetails, set[str]]:
     data = _mapping(raw)
     owner = _mapping(data.get("owner"))
     current_items = _mapping(data.get("items"))
     legacy_tracks = _mapping(data.get("tracks"))
     item_count = current_items.get("total", legacy_tracks.get("total"))
-    external_urls = _mapping(data.get("external_urls"))
+    playlist_id = _string(data.get("id"), requested_id)
+    resolved_url = _entity_url(data, "playlist", playlist_id)
     available = {
         field for field in ("name", "description", "public", "collaborative") if field in data
     }
     owner_id = _string(owner.get("id"), "unknown")
     return (
         PlaylistDetails(
-            id=_string(data.get("id"), requested_id),
+            id=playlist_id,
             name=_string(data.get("name"), requested_id),
+            spotify_url=resolved_url,
             description=_string(data.get("description")),
             owner=PlaylistOwner(
                 id=owner_id,
@@ -156,7 +182,7 @@ def _metadata(raw: Any, requested_id: str) -> tuple[PlaylistDetails, set[str]]:
             snapshot_id=data.get("snapshot_id")
             if isinstance(data.get("snapshot_id"), str)
             else None,
-            url=_string(external_urls.get("spotify")),
+            url=resolved_url,
         ),
         available,
     )
@@ -167,6 +193,8 @@ def _playlist_item(raw: Any, position: int) -> PlaylistItem:
     data = _mapping(entry.get("item") or entry.get("track"))
     item_type = data.get("type")
     if item_type == "track":
+        item_id = data.get("id") if isinstance(data.get("id"), str) else None
+        uri = data.get("uri") if isinstance(data.get("uri"), str) else None
         artists = [
             artist["name"]
             for value in data.get("artists", [])
@@ -175,8 +203,9 @@ def _playlist_item(raw: Any, position: int) -> PlaylistItem:
         return PlaylistItem(
             position=position,
             type="track",
-            id=data.get("id") if isinstance(data.get("id"), str) else None,
-            uri=data.get("uri") if isinstance(data.get("uri"), str) else None,
+            id=item_id,
+            uri=uri,
+            spotify_url=_optional_entity_url(data, "track", uri or item_id),
             name=_string(data.get("name"), "Unknown track"),
             artists=artists,
             duration_ms=data.get("duration_ms")
@@ -185,11 +214,14 @@ def _playlist_item(raw: Any, position: int) -> PlaylistItem:
         )
     if item_type == "episode":
         show = _mapping(data.get("show"))
+        item_id = data.get("id") if isinstance(data.get("id"), str) else None
+        uri = data.get("uri") if isinstance(data.get("uri"), str) else None
         return PlaylistItem(
             position=position,
             type="episode",
-            id=data.get("id") if isinstance(data.get("id"), str) else None,
-            uri=data.get("uri") if isinstance(data.get("uri"), str) else None,
+            id=item_id,
+            uri=uri,
+            spotify_url=_optional_entity_url(data, "episode", uri or item_id),
             name=_string(data.get("name"), "Unknown episode"),
             show=show.get("name") if isinstance(show.get("name"), str) else None,
             duration_ms=data.get("duration_ms")
@@ -225,6 +257,7 @@ async def list_playlists(
                 PlaylistSummary(
                     id=playlist_id,
                     name=name,
+                    spotify_url=_entity_url(data, "playlist", playlist_id),
                     item_count=count if isinstance(count, int) and count >= 0 else None,
                     public=data.get("public") if isinstance(data.get("public"), bool) else None,
                     collaborative=data.get("collaborative") is True,
@@ -307,8 +340,7 @@ async def create_playlist(
             visibility_status="unknown",
             warning="Spotify returned success without a playlist ID; verify the playlist list",
         )
-    urls = _mapping(created.get("external_urls"))
-    playlist_url = _string(urls.get("spotify"))
+    playlist_url = _entity_url(created, "playlist", playlist_id)
     try:
         raw_observed = await spotify.request("GET", f"/playlists/{playlist_id}")
         observed, available = _metadata(raw_observed, playlist_id)
@@ -317,6 +349,7 @@ async def create_playlist(
             status="accepted",
             playlist_id=playlist_id,
             playlist_url=playlist_url,
+            spotify_url=playlist_url,
             requested_public=public,
             visibility_status="unknown",
             warning=f"Playlist was created, but visibility verification failed: {exc}",
@@ -326,6 +359,7 @@ async def create_playlist(
             status="accepted",
             playlist_id=playlist_id,
             playlist_url=playlist_url,
+            spotify_url=playlist_url,
             requested_public=public,
             visibility_status="unknown",
             warning="Playlist was created, but Spotify omitted visibility during verification",
@@ -335,6 +369,7 @@ async def create_playlist(
         status="verified" if matches else "mismatch",
         playlist_id=playlist_id,
         playlist_url=playlist_url,
+        spotify_url=playlist_url,
         requested_public=public,
         observed_public=observed.public,
         visibility_status="verified" if matches else "mismatch",
@@ -376,6 +411,7 @@ async def update_playlist(
     except AmbiguousWrite as exc:
         return PlaylistUpdateResult(
             playlist_id=exact_id,
+            spotify_url=spotify_web_url("playlist", exact_id),
             updated_fields=updated_fields,
             status="ambiguous",
             mismatches=[],
@@ -388,6 +424,7 @@ async def update_playlist(
     except Exception as exc:  # The update may already have succeeded; never retry it blindly.
         return PlaylistUpdateResult(
             playlist_id=exact_id,
+            spotify_url=spotify_web_url("playlist", exact_id),
             updated_fields=updated_fields,
             status="ambiguous",
             mismatches=[],
@@ -403,6 +440,7 @@ async def update_playlist(
             mismatches.append(f"{field}: requested {expected!r}, observed {actual!r}")
     return PlaylistUpdateResult(
         playlist_id=exact_id,
+        spotify_url=observed.spotify_url,
         updated_fields=updated_fields,
         status="mismatch" if mismatches else "verified",
         mismatches=mismatches,
@@ -425,6 +463,7 @@ def _snapshot_result(
     return PlaylistSnapshotResult(
         operation=operation,
         playlist_id=playlist_id,
+        spotify_url=spotify_web_url("playlist", playlist_id),
         item_count=item_count,
         status="accepted" if snapshot_id else "ambiguous",
         snapshot_id=snapshot_id,
@@ -536,6 +575,7 @@ async def unfollow_playlist(spotify: SpotifyGateway, playlist_id: str) -> Playli
     except AmbiguousWrite as exc:
         return PlaylistUnfollowResult(
             playlist_id=exact_id,
+            spotify_url=spotify_web_url("playlist", exact_id),
             status="ambiguous",
             warning=str(exc),
         )
@@ -551,11 +591,13 @@ async def unfollow_playlist(spotify: SpotifyGateway, playlist_id: str) -> Playli
     except Exception as exc:  # The unfollow may already have succeeded.
         return PlaylistUnfollowResult(
             playlist_id=exact_id,
+            spotify_url=spotify_web_url("playlist", exact_id),
             status="ambiguous",
             warning=f"Spotify accepted the unfollow, but verification failed: {exc}",
         )
     return PlaylistUnfollowResult(
         playlist_id=exact_id,
+        spotify_url=spotify_web_url("playlist", exact_id),
         status="mismatch" if still_saved else "verified",
         still_saved=still_saved,
     )
