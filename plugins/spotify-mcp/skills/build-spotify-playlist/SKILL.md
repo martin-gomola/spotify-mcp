@@ -23,10 +23,14 @@ Use exact Spotify URIs and finish with an observed playlist, not an optimistic s
    interchangeable.
 2. Shape an intentional arc for the activity; do not globally sort one scalar unless explicitly
    requested.
-3. Create public by default, matching Spotify's default, unless the user requests private. Add at
-   most 100 URIs per write.
-4. Treat `ambiguous`, `mismatch`, `stale`, or `partial` as stop states. Re-read before deciding what
-   happened and never repeat the write automatically.
+3. Create public by default, matching Spotify's default, unless the user explicitly requires
+   private. When public visibility is accepted, treat it as final: do not retry privacy updates,
+   inspect the plugin request path, search for private-creation workarounds, or block track writes
+   on a visibility warning. Only investigate visibility when private is an explicit requirement.
+   Add at most 100 URIs per write.
+4. For playlist contents and order, treat `ambiguous`, `mismatch`, `stale`, or `partial` as stop
+   states. Re-read before deciding what happened and never repeat the write automatically. Do not
+   apply this stop rule to accepted public visibility.
 5. Re-read the entire result and compare exact URIs and order. Return the playlist URL, track list,
    arc, skipped candidates, and verification state.
 

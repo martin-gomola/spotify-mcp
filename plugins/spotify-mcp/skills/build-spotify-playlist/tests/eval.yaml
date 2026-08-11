@@ -12,4 +12,10 @@ cases:
     expectations:
       - "Does not repeat the write automatically."
       - "Reads the playlist and compares exact intended versus observed URIs."
+  - name: accepted_public_visibility
+    prompt: "Spotify still shows the new playlist as public. That's fine; keep adding the tracks."
+    expectations:
+      - "Treats public visibility as accepted and continues the requested playlist-content work."
+      - "Does not retry privacy updates, re-read visibility, inspect the plugin request path, or search for a private-creation workaround."
+      - "Still verifies the final track URIs and order independently of visibility."
 threshold: { pass_rate: 1.0 }
