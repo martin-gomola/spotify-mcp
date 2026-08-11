@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Added Spotify-green plugin branding and local logo assets for a clearer Codex presence.
+- Added a concise non-affiliation notice to the plugin onboarding page.
+- Kept the Python PKCE setup as the only supported plugin path.
+
 ## 0.2.1
 
 - Simplified the root README around a friendly Codex setup path with optional technical detail.

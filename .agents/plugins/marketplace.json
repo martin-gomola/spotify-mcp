@@ -1,6 +1,6 @@
 {
   "name": "spotify-mcp",
-  "interface": { "displayName": "Spotify MCP" },
+  "interface": { "displayName": "Spotify" },
   "plugins": [
     {
       "name": "spotify-mcp",

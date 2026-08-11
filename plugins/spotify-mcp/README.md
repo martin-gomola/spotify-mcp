@@ -7,6 +7,9 @@ include canonical Spotify links and can appear as compact cards in clients with 
 The MCP server runs locally. Spotify OAuth tokens stay outside both the plugin and repository, and
 PKCE does not require a client secret.
 
+This is an independent open-source project and is not affiliated with or endorsed by Spotify AB.
+Spotify is a trademark of Spotify AB.
+
 ## Before enabling the plugin
 
 1. Check out the repository at `~/dev/spotify-mcp`, or set `SPOTIFY_MCP_REPO` to its absolute path.
