@@ -162,7 +162,7 @@ def _retry_delay(
 ) -> float | None:
     if attempt >= max_attempts:
         return None
-    if response.status_code == 429:
+    if method == "GET" and response.status_code == 429:
         advised = _parse_retry_after(response.headers.get("Retry-After"))
         delay = advised if advised is not None else _backoff_seconds(attempt)
         return delay if delay <= max_retry_after_seconds else None

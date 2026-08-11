@@ -60,9 +60,18 @@ PUBLIC_TOOLS = {
     "spotify_saved_tracks",
     "spotify_search",
     "spotify_set_volume",
+    "spotify_seek",
+    "spotify_set_shuffle",
+    "spotify_set_repeat",
     "spotify_status",
     "spotify_top_artists",
     "spotify_top_tracks",
+    "spotify_transfer_playback",
+}
+
+APP_ONLY_TOOLS = {
+    "spotify_results_context",
+    "spotify_results_play",
 }
 
 
@@ -96,7 +105,13 @@ async def test_public_mcp_v2_contract(
             str(resource.uri): resource for resource in (await client.list_resources()).resources
         }
 
-        assert set(tools) == PUBLIC_TOOLS
+        assert set(tools) == PUBLIC_TOOLS | APP_ONLY_TOOLS
+        model_visible_tools = {
+            name
+            for name, tool in tools.items()
+            if (tool.meta or {}).get("ui", {}).get("visibility") != ["app"]
+        }
+        assert model_visible_tools == PUBLIC_TOOLS
         assert resources[RESULTS_UI_URI].mime_type == "text/html;profile=mcp-app"
         for tool in tools.values():
             assert tool.output_schema is not None, tool.name
@@ -135,6 +150,17 @@ async def test_public_mcp_v2_contract(
         assert adjust_annotations.destructive_hint is False
         assert adjust_annotations.idempotent_hint is False
 
+        for name in (
+            "spotify_seek",
+            "spotify_set_shuffle",
+            "spotify_set_repeat",
+            "spotify_transfer_playback",
+        ):
+            annotations = _annotations(tools[name])
+            assert annotations.read_only_hint is False
+            assert annotations.destructive_hint is False
+            assert annotations.idempotent_hint is True
+
         audit_annotations = _annotations(tools["spotify_dj_audit"])
         assert audit_annotations.read_only_hint is True
         assert audit_annotations.destructive_hint is False
@@ -149,8 +175,20 @@ async def test_public_mcp_v2_contract(
         assert render_annotations.read_only_hint is True
         assert tools["spotify_render_results"].meta == {
             "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["model"]},
-            "openai/outputTemplate": RESULTS_UI_URI,
         }
+        assert tools["spotify_results_context"].meta == {
+            "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["app"]}
+        }
+        assert tools["spotify_results_play"].meta == {
+            "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["app"]}
+        }
+        context_annotations = _annotations(tools["spotify_results_context"])
+        assert context_annotations.read_only_hint is True
+        assert context_annotations.idempotent_hint is True
+        play_annotations = _annotations(tools["spotify_results_play"])
+        assert play_annotations.read_only_hint is False
+        assert play_annotations.destructive_hint is False
+        assert play_annotations.idempotent_hint is False
 
         status = await client.call_tool("spotify_status", {})
 

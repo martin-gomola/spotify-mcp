@@ -6,14 +6,46 @@ from importlib.resources import files
 from typing import Literal, cast
 from urllib.parse import urlsplit
 
-from mcp.server.apps import Apps
+from mcp.server.apps import Apps, ResourceCsp
+from mcp.server.mcpserver import Context
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from spotify_mcp.domain.links import SpotifyEntityType, spotify_web_url
+from spotify_mcp.application.playback import (
+    Device,
+    NowPlaying,
+    ObservedPlaybackResult,
+    PlaybackService,
+)
+from spotify_mcp.domain.links import SpotifyEntityType, spotify_uri, spotify_web_url
+from spotify_mcp.mcp_server.annotations import READ_ONLY, WRITE
+from spotify_mcp.mcp_server.context import AppContext
 
 RESULTS_UI_URI = "ui://spotify/results/v1.html"
 _RESULTS_ASSET = "resources/spotify-results-v1.html"
+_PLAYABLE_RESULT_TYPES = frozenset({"track", "album", "artist", "playlist"})
+
+
+def _spotify_entity_from_url(value: str) -> tuple[SpotifyEntityType, str]:
+    parsed = urlsplit(value)
+    parts = [part for part in parsed.path.split("/") if part]
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "open.spotify.com"
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or len(parts) != 2
+        or parts[0] not in {"track", "album", "artist", "playlist", "episode", "show"}
+    ):
+        raise ValueError("spotify_url must be a canonical open.spotify.com entity URL")
+    entity_type = cast(SpotifyEntityType, parts[0])
+    entity_id = parts[1]
+    if spotify_web_url(entity_type, entity_id) != value:
+        raise ValueError("spotify_url must be a canonical open.spotify.com entity URL")
+    return entity_type, entity_id
 
 
 class SpotifyResultCard(BaseModel):
@@ -30,24 +62,15 @@ class SpotifyResultCard(BaseModel):
     @field_validator("spotify_url")
     @classmethod
     def validate_spotify_url(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        parts = [part for part in parsed.path.split("/") if part]
-        if (
-            parsed.scheme != "https"
-            or parsed.hostname != "open.spotify.com"
-            or parsed.port is not None
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query
-            or parsed.fragment
-            or len(parts) != 2
-            or parts[0] not in {"track", "album", "artist", "playlist", "episode", "show"}
-        ):
-            raise ValueError("spotify_url must be a canonical open.spotify.com entity URL")
-        entity_type = cast(SpotifyEntityType, parts[0])
-        if spotify_web_url(entity_type, parts[1]) != value:
-            raise ValueError("spotify_url must be a canonical open.spotify.com entity URL")
+        _spotify_entity_from_url(value)
         return value
+
+    @model_validator(mode="after")
+    def validate_kind_matches_url(self) -> SpotifyResultCard:
+        entity_type, _ = _spotify_entity_from_url(self.spotify_url)
+        if entity_type != self.kind:
+            raise ValueError("kind must match the canonical Spotify URL entity type")
+        return self
 
 
 class SpotifyResultsView(BaseModel):
@@ -57,6 +80,18 @@ class SpotifyResultsView(BaseModel):
 
     title: str = Field(min_length=1, max_length=200)
     items: list[SpotifyResultCard] = Field(min_length=1, max_length=50)
+
+
+class SpotifyResultsContext(BaseModel):
+    """Device and playback state needed by the inline results view."""
+
+    model_config = ConfigDict(frozen=True)
+
+    devices: list[Device]
+    selected_device_id: str | None
+    requires_device_selection: bool
+    has_usable_devices: bool
+    now_playing: NowPlaying
 
 
 def create_results_apps() -> Apps:
@@ -70,6 +105,12 @@ def create_results_apps() -> Apps:
         name="spotify-results",
         title="Spotify results",
         description="Compact clickable Spotify result cards.",
+        csp=ResourceCsp(
+            connect_domains=[],
+            resource_domains=[],
+            frame_domains=[],
+            base_uri_domains=[],
+        ),
         prefers_border=True,
     )
 
@@ -88,10 +129,54 @@ def create_results_apps() -> Apps:
             idempotent_hint=True,
             open_world_hint=False,
         ),
-        meta={"openai/outputTemplate": RESULTS_UI_URI},
         structured_output=True,
     )
     async def render_results(title: str, items: list[SpotifyResultCard]) -> SpotifyResultsView:
         return SpotifyResultsView(title=title, items=items)
+
+    @apps.tool(
+        resource_uri=RESULTS_UI_URI,
+        visibility=("app",),
+        name="spotify_results_context",
+        title="Spotify results playback context",
+        description="Return devices and observed playback state for the inline Spotify results UI.",
+        annotations=READ_ONLY,
+        structured_output=True,
+    )
+    async def results_context(ctx: Context[AppContext]) -> SpotifyResultsContext:
+        service = PlaybackService(ctx.request_context.lifespan_context.spotify)
+        devices = (await service.devices()).devices
+        now_playing = await service.now_playing()
+        usable = [
+            device for device in devices if device.id is not None and not device.is_restricted
+        ]
+        selected_device_id = usable[0].id if len(usable) == 1 else None
+        return SpotifyResultsContext(
+            devices=devices,
+            selected_device_id=selected_device_id,
+            requires_device_selection=len(usable) > 1,
+            has_usable_devices=bool(usable),
+            now_playing=now_playing,
+        )
+
+    @apps.tool(
+        resource_uri=RESULTS_UI_URI,
+        visibility=("app",),
+        name="spotify_results_play",
+        title="Play Spotify result",
+        description="Play one exact result on one selected device and observe playback once.",
+        annotations=WRITE,
+        structured_output=True,
+    )
+    async def results_play(
+        ctx: Context[AppContext], spotify_url: str, device_id: str
+    ) -> ObservedPlaybackResult:
+        entity_type, entity_id = _spotify_entity_from_url(spotify_url)
+        if entity_type not in _PLAYABLE_RESULT_TYPES:
+            raise ValueError("direct play supports tracks, albums, artists, and playlists")
+        return await PlaybackService(ctx.request_context.lifespan_context.spotify).play_and_observe(
+            uri=spotify_uri(entity_type, entity_id),
+            device_id=device_id,
+        )
 
     return apps

@@ -13,6 +13,7 @@ from spotify_mcp.application.playback import (
     PlaybackResult,
     PlaybackService,
     QueueableType,
+    RepeatState,
     VolumeAdjustmentResult,
 )
 from spotify_mcp.mcp_server.annotations import IDEMPOTENT_WRITE, READ_ONLY, WRITE
@@ -62,13 +63,17 @@ def register(server: MCPServer[AppContext]) -> None:
         title="Play on Spotify",
         description=(
             "Start a Spotify track, album, artist, or playlist on a selected or active device. "
-            "Provide a Spotify URI or both item_type and item_id."
+            "Provide a Spotify URI, both item_type and item_id, or query with item_type. "
+            "A query only starts playback when its top results contain exactly one exact name "
+            "or exact name-and-artist match; otherwise it returns exact URI candidates "
+            "without writing."
         ),
         annotations=WRITE,
         structured_output=True,
     )
     async def spotify_play(
         ctx: Context[AppContext],
+        query: str | None = None,
         uri: str | None = None,
         item_type: PlayableType | None = None,
         item_id: str | None = None,
@@ -76,6 +81,7 @@ def register(server: MCPServer[AppContext]) -> None:
         offset: Annotated[int | None, Field(ge=0)] = None,
     ) -> PlaybackResult:
         return await PlaybackService(ctx.request_context.lifespan_context.spotify).play(
+            query=query,
             uri=uri,
             item_type=item_type,
             item_id=item_id,
@@ -197,3 +203,69 @@ def register(server: MCPServer[AppContext]) -> None:
         return await PlaybackService(ctx.request_context.lifespan_context.spotify).adjust_volume(
             adjustment, device_id=device_id
         )
+
+    @server.tool(
+        name="spotify_seek",
+        title="Seek Spotify Playback",
+        description="Seek to an exact millisecond position in the current Spotify item.",
+        annotations=IDEMPOTENT_WRITE,
+        structured_output=True,
+    )
+    async def spotify_seek(
+        position_ms: Annotated[int, Field(ge=0)],
+        ctx: Context[AppContext],
+        device_id: str | None = None,
+    ) -> PlaybackResult:
+        return await PlaybackService(ctx.request_context.lifespan_context.spotify).seek(
+            position_ms, device_id=device_id
+        )
+
+    @server.tool(
+        name="spotify_set_shuffle",
+        title="Set Spotify Shuffle",
+        description="Enable or disable shuffle on a selected or active Spotify device.",
+        annotations=IDEMPOTENT_WRITE,
+        structured_output=True,
+    )
+    async def spotify_set_shuffle(
+        state: bool,
+        ctx: Context[AppContext],
+        device_id: str | None = None,
+    ) -> PlaybackResult:
+        return await PlaybackService(ctx.request_context.lifespan_context.spotify).set_shuffle(
+            state, device_id=device_id
+        )
+
+    @server.tool(
+        name="spotify_set_repeat",
+        title="Set Spotify Repeat",
+        description="Set repeat to track, context, or off on a selected or active device.",
+        annotations=IDEMPOTENT_WRITE,
+        structured_output=True,
+    )
+    async def spotify_set_repeat(
+        repeat_state: RepeatState,
+        ctx: Context[AppContext],
+        device_id: str | None = None,
+    ) -> PlaybackResult:
+        return await PlaybackService(ctx.request_context.lifespan_context.spotify).set_repeat(
+            repeat_state, device_id=device_id
+        )
+
+    @server.tool(
+        name="spotify_transfer_playback",
+        title="Transfer Spotify Playback",
+        description=(
+            "Transfer Spotify Connect to one explicit device, optionally starting playback."
+        ),
+        annotations=IDEMPOTENT_WRITE,
+        structured_output=True,
+    )
+    async def spotify_transfer_playback(
+        device_id: str,
+        ctx: Context[AppContext],
+        play: bool = False,
+    ) -> PlaybackResult:
+        return await PlaybackService(
+            ctx.request_context.lifespan_context.spotify
+        ).transfer_playback(device_id, play=play)

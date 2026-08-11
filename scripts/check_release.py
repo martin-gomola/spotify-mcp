@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -135,17 +137,64 @@ def check_docs(errors: list[str]) -> None:
 
     tool_catalog = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
     expected_count = len(tool_names())
-    if f"exposes {expected_count} structured tools" not in tool_catalog:
+    if not re.search(
+        rf"exposes {expected_count} (?:model-visible )?structured tools(?: to the model)?",
+        tool_catalog,
+    ):
         errors.append(f"docs/tools.md: public tool count must be {expected_count}")
     undocumented = sorted(name for name in tool_names() if f"`{name}`" not in tool_catalog)
     if undocumented:
         errors.append(f"docs/tools.md: undocumented tools: {', '.join(undocumented)}")
 
+    check_ui_bundle(errors)
+
+
+def check_ui_bundle(errors: list[str]) -> None:
     ui_asset = SOURCE / "mcp_server" / "resources" / "spotify-results-v1.html"
     if not ui_asset.is_file():
         errors.append("MCP Apps result HTML asset is missing")
-    elif "ui/notifications/tool-result" not in ui_asset.read_text(encoding="utf-8"):
-        errors.append("MCP Apps result HTML does not handle tool result notifications")
+        return
+
+    html = ui_asset.read_text(encoding="utf-8")
+    for marker in (
+        "ui/notifications/tool-result",
+        "spotify_results_context",
+        "spotify_results_play",
+    ):
+        if marker not in html:
+            errors.append(f"MCP Apps result HTML is missing required marker: {marker}")
+
+    remote_asset_patterns = {
+        "remote script": r'<script[^>]+src=["\']https?://',
+        "remote stylesheet": r'<link[^>]+href=["\']https?://',
+        "remote image": r'<img[^>]+src=["\']https?://',
+        "embedded remote frame": r'<iframe[^>]+src=["\']https?://',
+        "remote CSS import": r'@import\s+(?:url\()?["]?https?://',
+    }
+    for label, pattern in remote_asset_patterns.items():
+        if re.search(pattern, html, re.I):
+            errors.append(f"MCP Apps result HTML contains a {label}")
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="spotify-mcp-ui-") as output_dir:
+            completed = subprocess.run(
+                ["npm", "run", "build:ui", "--", "--outDir", output_dir],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                detail = completed.stderr.strip() or completed.stdout.strip()
+                errors.append(f"MCP Apps result UI could not be rebuilt: {detail}")
+                return
+            rebuilt = Path(output_dir) / ui_asset.name
+            if not rebuilt.is_file():
+                errors.append("MCP Apps result UI build did not produce the expected HTML asset")
+            elif rebuilt.read_bytes() != ui_asset.read_bytes():
+                errors.append("MCP Apps result HTML is stale; run `npm run build:ui`")
+    except OSError as exc:
+        errors.append(f"MCP Apps result UI build tooling is unavailable: {exc}")
 
 
 def check_local_startup(errors: list[str]) -> None:

@@ -43,6 +43,7 @@ codex-update: setup
 
 sync:
 	uv sync --all-groups
+	npm ci
 
 format:
 	uv run ruff format .
@@ -51,17 +52,20 @@ format:
 lint:
 	uv run ruff format --check .
 	uv run ruff check .
+	npm run typecheck:ui
 
 typecheck:
 	uv run mypy src
 
 test:
 	uv run pytest
+	npm run test:ui
 
 release-check:
 	uv run python scripts/check_release.py
 
 build:
+	npm run build:ui
 	uv build
 
 check: lint typecheck test release-check build

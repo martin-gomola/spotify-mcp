@@ -7,6 +7,7 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from spotify_mcp.application.playback import PlaybackService
+from spotify_mcp.domain.errors import AmbiguousWrite
 from spotify_mcp.mcp_server.context import AppContext
 from spotify_mcp.mcp_server.tools.playback import register
 
@@ -38,7 +39,10 @@ class FakeSpotify:
         json: Any = None,
     ) -> Any:
         self.calls.append((method, path, params, json))
-        return self.responses.pop(0) if self.responses else None
+        response = self.responses.pop(0) if self.responses else None
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 @pytest.mark.anyio
@@ -112,6 +116,416 @@ async def test_play_track_targets_active_device_with_current_request_shape() -> 
 
 
 @pytest.mark.anyio
+async def test_play_uses_only_usable_inactive_device_and_transfers_once() -> None:
+    devices = {
+        "devices": [
+            {
+                "id": "restricted",
+                "name": "TV",
+                "type": "TV",
+                "is_active": True,
+                "is_restricted": True,
+            },
+            {
+                "id": "device-2",
+                "name": "Kitchen",
+                "type": "Speaker",
+                "is_active": False,
+                "is_restricted": False,
+            },
+        ]
+    }
+    spotify = FakeSpotify([devices, None, None])
+
+    result = await PlaybackService(spotify).play(uri="spotify:track:track-1")
+
+    assert result.device_id == "device-2"
+    assert spotify.calls == [
+        ("GET", "/me/player/devices", None, None),
+        ("PUT", "/me/player", None, {"device_ids": ["device-2"], "play": False}),
+        (
+            "PUT",
+            "/me/player/play",
+            {"device_id": "device-2"},
+            {"uris": ["spotify:track:track-1"]},
+        ),
+    ]
+
+
+@pytest.mark.anyio
+async def test_play_requires_device_choice_for_multiple_usable_inactive_devices() -> None:
+    devices = {
+        "devices": [
+            {
+                "id": "device-1",
+                "name": "Desk",
+                "type": "Computer",
+                "is_active": False,
+                "is_restricted": False,
+            },
+            {
+                "id": "device-2",
+                "name": "Kitchen",
+                "type": "Speaker",
+                "is_active": False,
+                "is_restricted": False,
+            },
+        ]
+    }
+    spotify = FakeSpotify([devices])
+
+    with pytest.raises(ValueError, match=r"Multiple Spotify devices are available.*device_id"):
+        await PlaybackService(spotify).play(uri="spotify:track:track-1")
+
+    assert spotify.calls == [("GET", "/me/player/devices", None, None)]
+
+
+@pytest.mark.anyio
+async def test_play_query_auto_plays_one_exact_name_match_and_reports_entity() -> None:
+    search_response = {
+        "tracks": {
+            "total": 2,
+            "items": [
+                {
+                    "id": "exact",
+                    "uri": "spotify:track:exact",
+                    "name": "Road Song",
+                    "artists": [{"name": "Driver"}],
+                    "album": {"name": "Miles"},
+                },
+                {
+                    "id": "other",
+                    "uri": "spotify:track:other",
+                    "name": "Road Song (Live)",
+                    "artists": [{"name": "Driver"}],
+                },
+            ],
+        }
+    }
+    spotify = FakeSpotify([search_response, ACTIVE_DEVICES, None])
+
+    result = await PlaybackService(spotify).play(query=" road song ", item_type="track")
+
+    assert result.status == "accepted"
+    assert result.query == "road song"
+    assert result.resolved_entity is not None
+    assert result.resolved_entity.uri == "spotify:track:exact"
+    assert result.candidates == []
+    assert spotify.calls[-1] == (
+        "PUT",
+        "/me/player/play",
+        {"device_id": "device-1"},
+        {"uris": ["spotify:track:exact"]},
+    )
+
+
+@pytest.mark.anyio
+async def test_play_query_returns_ambiguous_candidates_without_write() -> None:
+    search_response = {
+        "tracks": {
+            "total": 2,
+            "items": [
+                {
+                    "id": "original",
+                    "uri": "spotify:track:original",
+                    "name": "Road Song",
+                    "artists": [{"name": "Driver"}],
+                },
+                {
+                    "id": "remaster",
+                    "uri": "spotify:track:remaster",
+                    "name": "Road Song",
+                    "artists": [{"name": "Driver"}],
+                },
+            ],
+        }
+    }
+    spotify = FakeSpotify([search_response])
+
+    result = await PlaybackService(spotify).play(query="Road Song", item_type="track")
+
+    assert result.status == "needs_selection"
+    assert result.uri is None
+    assert result.resolved_entity is None
+    assert [candidate.uri for candidate in result.candidates] == [
+        "spotify:track:original",
+        "spotify:track:remaster",
+    ]
+    assert [call for call in spotify.calls if call[0] != "GET"] == []
+
+
+@pytest.mark.anyio
+async def test_play_query_auto_plays_unique_exact_match_from_bounded_top_results() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "tracks": {
+                    "total": 20,
+                    "items": [
+                        {
+                            "id": "exact",
+                            "uri": "spotify:track:exact",
+                            "name": "Road Song",
+                            "artists": [{"name": "Driver"}],
+                        }
+                    ],
+                }
+            },
+            ACTIVE_DEVICES,
+            None,
+        ]
+    )
+
+    result = await PlaybackService(spotify).play(query="Road Song", item_type="track")
+
+    assert result.status == "accepted"
+    assert result.resolved_entity is not None
+    assert result.resolved_entity.uri == "spotify:track:exact"
+    assert spotify.calls[0][2]["limit"] == 10
+    assert spotify.calls[-1][0:2] == ("PUT", "/me/player/play")
+
+
+@pytest.mark.anyio
+async def test_play_query_accepts_exact_track_and_artist_phrase() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "tracks": {
+                    "total": 25,
+                    "items": [
+                        {
+                            "id": "peace-piece",
+                            "uri": "spotify:track:peace-piece",
+                            "name": "Peace Piece",
+                            "artists": [{"name": "Bill Evans"}],
+                        }
+                    ],
+                }
+            },
+            ACTIVE_DEVICES,
+            None,
+        ]
+    )
+
+    result = await PlaybackService(spotify).play(
+        query="Peace Piece by Bill Evans", item_type="track"
+    )
+
+    assert result.status == "accepted"
+    assert result.resolved_entity is not None
+    assert result.resolved_entity.uri == "spotify:track:peace-piece"
+
+
+@pytest.mark.anyio
+async def test_play_query_returns_no_match_without_write() -> None:
+    spotify = FakeSpotify([{"albums": {"total": 0, "items": []}}])
+
+    result = await PlaybackService(spotify).play(query="Missing Album", item_type="album")
+
+    assert result.status == "no_match"
+    assert result.query == "Missing Album"
+    assert result.candidates == []
+    assert spotify.calls == [
+        (
+            "GET",
+            "/search",
+            {
+                "q": "Missing Album",
+                "type": "album",
+                "limit": 10,
+                "offset": 0,
+                "market": "from_token",
+            },
+            None,
+        )
+    ]
+
+
+@pytest.mark.anyio
+async def test_play_query_rejects_mixed_exact_and_search_inputs_without_read_or_write() -> None:
+    spotify = FakeSpotify([])
+
+    with pytest.raises(ValueError, match="query cannot be combined"):
+        await PlaybackService(spotify).play(
+            query="Road Song", item_type="track", uri="spotify:track:exact"
+        )
+
+    assert spotify.calls == []
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_verifies_exact_track_without_retrying_write() -> None:
+    spotify = FakeSpotify(
+        [
+            ACTIVE_DEVICES,
+            None,
+            {
+                "is_playing": True,
+                "device": ACTIVE_DEVICES["devices"][0],
+                "item": {
+                    "type": "track",
+                    "id": "track-1",
+                    "uri": "spotify:track:track-1",
+                    "name": "Exact Track",
+                },
+            },
+        ]
+    )
+
+    result = await PlaybackService(spotify).play_and_observe(
+        uri="spotify:track:track-1", device_id="device-1"
+    )
+
+    assert result.status == "verified"
+    assert result.requested_uri == "spotify:track:track-1"
+    assert result.device_id == "device-1"
+    assert result.observed.item is not None
+    assert result.observed.item.uri == "spotify:track:track-1"
+    assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/play")) == 1
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_reports_unverified_mismatch_without_retrying_write() -> None:
+    spotify = FakeSpotify(
+        [
+            ACTIVE_DEVICES,
+            None,
+            {
+                "is_playing": True,
+                "device": ACTIVE_DEVICES["devices"][0],
+                "item": {
+                    "type": "track",
+                    "id": "different",
+                    "uri": "spotify:track:different",
+                    "name": "Different Track",
+                },
+            },
+        ]
+    )
+
+    result = await PlaybackService(spotify).play_and_observe(
+        uri="spotify:track:track-1", device_id="device-1"
+    )
+
+    assert result.status == "unverified"
+    assert result.observed.item is not None
+    assert result.observed.item.uri == "spotify:track:different"
+    assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/play")) == 1
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_verifies_context_uri_for_album() -> None:
+    spotify = FakeSpotify(
+        [
+            ACTIVE_DEVICES,
+            None,
+            {
+                "is_playing": True,
+                "device": ACTIVE_DEVICES["devices"][0],
+                "context": {"type": "album", "uri": "spotify:album:album-1"},
+                "item": {
+                    "type": "track",
+                    "id": "album-track",
+                    "uri": "spotify:track:album-track",
+                    "name": "Album Track",
+                },
+            },
+        ]
+    )
+
+    result = await PlaybackService(spotify).play_and_observe(
+        uri="spotify:album:album-1", device_id="device-1"
+    )
+
+    assert result.status == "verified"
+    assert result.observed.context_uri == "spotify:album:album-1"
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_requires_explicit_existing_device_before_write() -> None:
+    service = PlaybackService(FakeSpotify([]))
+
+    with pytest.raises(ValueError, match="device_id is required"):
+        await service.play_and_observe(uri="spotify:track:track-1", device_id=None)
+
+    spotify = FakeSpotify([ACTIVE_DEVICES])
+    with pytest.raises(ValueError, match="Spotify device not found: missing"):
+        await PlaybackService(spotify).play_and_observe(
+            uri="spotify:track:track-1", device_id="missing"
+        )
+
+    assert spotify.calls == [("GET", "/me/player/devices", None, None)]
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_rejects_restricted_device_before_write() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "devices": [
+                    {
+                        "id": "restricted",
+                        "name": "TV",
+                        "type": "TV",
+                        "is_active": True,
+                        "is_restricted": True,
+                    }
+                ]
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="cannot be controlled: TV"):
+        await PlaybackService(spotify).play_and_observe(
+            uri="spotify:track:track-1", device_id="restricted"
+        )
+
+    assert spotify.calls == [("GET", "/me/player/devices", None, None)]
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_requires_playing_state_and_requested_device() -> None:
+    for observed in (
+        {
+            "is_playing": False,
+            "device": ACTIVE_DEVICES["devices"][0],
+            "item": {
+                "type": "track",
+                "uri": "spotify:track:track-1",
+                "name": "Exact Track",
+            },
+        },
+        {
+            "is_playing": True,
+            "device": {**ACTIVE_DEVICES["devices"][0], "id": "other-device"},
+            "item": {
+                "type": "track",
+                "uri": "spotify:track:track-1",
+                "name": "Exact Track",
+            },
+        },
+    ):
+        spotify = FakeSpotify([ACTIVE_DEVICES, None, observed])
+        result = await PlaybackService(spotify).play_and_observe(
+            uri="spotify:track:track-1", device_id="device-1"
+        )
+        assert result.status == "unverified"
+        assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/play")) == 1
+
+
+@pytest.mark.anyio
+async def test_play_and_observe_propagates_ambiguous_write_without_retry() -> None:
+    spotify = FakeSpotify([ACTIVE_DEVICES, AmbiguousWrite("verify remote state before retrying")])
+
+    with pytest.raises(AmbiguousWrite, match="verify remote state"):
+        await PlaybackService(spotify).play_and_observe(
+            uri="spotify:track:track-1", device_id="device-1"
+        )
+
+    assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/play")) == 1
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("method_name", "http_method", "path", "operation"),
     [
@@ -131,6 +545,71 @@ async def test_playback_controls_use_current_endpoints(
 
     assert result.operation == operation
     assert spotify.calls[-1] == (http_method, path, {"device_id": "device-1"}, None)
+
+
+@pytest.mark.anyio
+async def test_seek_shuffle_repeat_and_transfer_use_typed_request_shapes() -> None:
+    spotify = FakeSpotify(
+        [ACTIVE_DEVICES, None, ACTIVE_DEVICES, None, ACTIVE_DEVICES, None, ACTIVE_DEVICES, None]
+    )
+    service = PlaybackService(spotify)
+
+    seek = await service.seek(12_500)
+    shuffle = await service.set_shuffle(True)
+    repeat = await service.set_repeat("context")
+    transfer = await service.transfer_playback("device-1", play=True)
+
+    assert seek.position_ms == 12_500
+    assert shuffle.shuffle_state is True
+    assert repeat.repeat_state == "context"
+    assert transfer.play is True
+    assert spotify.calls[1] == (
+        "PUT",
+        "/me/player/seek",
+        {"position_ms": 12_500, "device_id": "device-1"},
+        None,
+    )
+    assert spotify.calls[3] == (
+        "PUT",
+        "/me/player/shuffle",
+        {"state": True, "device_id": "device-1"},
+        None,
+    )
+    assert spotify.calls[5] == (
+        "PUT",
+        "/me/player/repeat",
+        {"state": "context", "device_id": "device-1"},
+        None,
+    )
+    assert spotify.calls[7] == (
+        "PUT",
+        "/me/player",
+        None,
+        {"device_ids": ["device-1"], "play": True},
+    )
+
+
+@pytest.mark.anyio
+async def test_new_playback_controls_validate_before_write() -> None:
+    spotify = FakeSpotify([])
+    service = PlaybackService(spotify)
+
+    with pytest.raises(ValueError, match="position_ms must be non-negative"):
+        await service.seek(-1)
+    with pytest.raises(ValueError, match="repeat_state"):
+        await service.set_repeat("all")  # type: ignore[arg-type]
+
+    assert spotify.calls == []
+
+
+@pytest.mark.anyio
+async def test_new_playback_control_propagates_ambiguous_write_without_retry() -> None:
+    spotify = FakeSpotify([ACTIVE_DEVICES, AmbiguousWrite("verify remote state before retrying")])
+
+    with pytest.raises(AmbiguousWrite, match="verify remote state"):
+        await PlaybackService(spotify).seek(5_000)
+
+    assert [call[0:2] for call in spotify.calls].count(("PUT", "/me/player/seek")) == 1
 
 
 @pytest.mark.anyio
@@ -292,6 +771,10 @@ async def test_playback_tools_have_spotify_names_outputs_and_annotations() -> No
         "spotify_add_to_queue",
         "spotify_set_volume",
         "spotify_adjust_volume",
+        "spotify_seek",
+        "spotify_set_shuffle",
+        "spotify_set_repeat",
+        "spotify_transfer_playback",
     }
     assert all(tool.output_schema is not None for tool in tools.values())
     assert tools["spotify_now_playing"].annotations.read_only_hint is True
@@ -299,3 +782,7 @@ async def test_playback_tools_have_spotify_names_outputs_and_annotations() -> No
     assert tools["spotify_pause"].annotations.idempotent_hint is True
     assert tools["spotify_adjust_volume"].annotations.read_only_hint is False
     assert tools["spotify_adjust_volume"].annotations.idempotent_hint is False
+    assert tools["spotify_seek"].annotations.idempotent_hint is True
+    assert tools["spotify_set_shuffle"].annotations.idempotent_hint is True
+    assert tools["spotify_set_repeat"].annotations.idempotent_hint is True
+    assert tools["spotify_transfer_playback"].annotations.idempotent_hint is True

@@ -113,6 +113,20 @@ def test_explicit_auth_values_override_environment(monkeypatch: pytest.MonkeyPat
     assert settings.redirect_uri == "http://127.0.0.1:6666/callback"
 
 
+def test_explicit_client_id_can_repair_invalid_saved_config(tmp_path: Path) -> None:
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("not-json", encoding="utf-8")
+
+    settings = load_settings(
+        client_id="replacement-client",
+        app_config_path=invalid,
+        dotenv_path=None,
+    )
+
+    assert settings.client_id == "replacement-client"
+    assert settings.redirect_uri == DEFAULT_REDIRECT_URI
+
+
 def test_missing_or_invalid_saved_config_has_actionable_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

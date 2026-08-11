@@ -1,0 +1,19 @@
+{
+  "name": "spotify-mcp-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:ui": "vite build --config ui/spotify-results/vite.config.ts",
+    "test:ui": "vitest run --config ui/spotify-results/vitest.config.ts",
+    "typecheck:ui": "tsc --noEmit -p ui/spotify-results/tsconfig.json"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@types/node": "24.10.4",
+    "jsdom": "27.4.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "4.1.10"
+  }
+}

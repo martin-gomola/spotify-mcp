@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added ambiguity-safe query playback plus seek, shuffle, repeat, and explicit Spotify Connect
+  transfer controls.
+- Made device fallback require an explicit choice when several inactive devices are available.
+- Added guided `spotify-mcp init` onboarding with app-change reauthorization and live verification.
+- Added multi-version GitHub CI and Dependabot coverage.
+
 ## 0.2.2
 
 - Added Spotify-green plugin branding and local logo assets for a clearer Codex presence.

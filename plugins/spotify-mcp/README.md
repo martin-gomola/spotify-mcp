@@ -13,20 +13,30 @@ Spotify is a trademark of Spotify AB.
 ## Before enabling the plugin
 
 1. Check out the repository at `~/dev/spotify-mcp`, or set `SPOTIFY_MCP_REPO` to its absolute path.
-2. Copy `.env.example` to `.env` and set `SPOTIFY_CLIENT_ID`.
-3. Create a Spotify Web API application with this exact redirect URI:
+2. Create a Spotify Web API application with this exact redirect URI:
 
    ```text
    http://127.0.0.1:8888/callback
    ```
 
-4. Complete the one-time setup and install the plugin:
+3. Create the local environment file and add the Client ID from your Spotify application:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   ```dotenv
+   SPOTIFY_CLIENT_ID=your_client_id
+   ```
+
+4. Connect Spotify, verify the account, and install or refresh the plugin:
 
    ```bash
    make codex-install
    ```
 
-The command connects Spotify when needed, verifies access, and installs or refreshes the plugin.
+The install command opens Spotify authorization when needed, verifies access, and installs or
+refreshes the plugin.
 Start a new Codex task afterward. Codex starts and stops the stdio server itself, so no terminal
 needs to remain open. For standalone development only, `make run` starts a foreground server that
 stays attached to its terminal until `Ctrl-C`.

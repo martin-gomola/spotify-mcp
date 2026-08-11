@@ -55,6 +55,7 @@ class TokenSet:
     expires_at: float
     scope: str | None = None
     token_type: str = "Bearer"
+    app_fingerprint: str | None = None
 
     def is_expiring(self, *, now: float, margin_seconds: int = REFRESH_MARGIN_SECONDS) -> bool:
         return self.expires_at <= now + margin_seconds
@@ -84,6 +85,7 @@ class TokenStore:
                 expires_at=float(payload["expires_at"]),
                 scope=_optional_string(payload, "scope"),
                 token_type=_optional_string(payload, "token_type") or "Bearer",
+                app_fingerprint=_optional_string(payload, "app_fingerprint"),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise AuthenticationRequired(
@@ -208,6 +210,7 @@ class SpotifyOAuth:
         tokens = self.token_store.load()
         if tokens is None:
             raise AuthenticationRequired("Spotify is not authenticated; run `spotify-mcp auth`.")
+        _require_app_binding(tokens, self.settings)
         _require_scopes(tokens)
         if not tokens.is_expiring(now=self._clock()):
             return tokens.access_token
@@ -218,6 +221,7 @@ class SpotifyOAuth:
                 raise AuthenticationRequired(
                     "Spotify is not authenticated; run `spotify-mcp auth`."
                 )
+            _require_app_binding(current, self.settings)
             _require_scopes(current)
             if not current.is_expiring(now=self._clock()):
                 return current.access_token
@@ -244,6 +248,7 @@ class SpotifyOAuth:
         return tokens
 
     async def refresh(self, tokens: TokenSet) -> TokenSet:
+        _require_app_binding(tokens, self.settings)
         if not tokens.refresh_token:
             raise AuthenticationRequired("Spotify session cannot be refreshed; authenticate again.")
         payload = await self._request_token(
@@ -333,6 +338,7 @@ class SpotifyOAuth:
             expires_at=self._clock() + float(expires_in),
             scope=_optional_string(payload, "scope"),
             token_type=_optional_string(payload, "token_type") or "Bearer",
+            app_fingerprint=spotify_app_fingerprint(self.settings),
         )
 
 
@@ -353,6 +359,24 @@ def _require_scopes(tokens: TokenSet) -> None:
             "Spotify authorization is missing required scopes: "
             f"{', '.join(missing)}. Run `spotify-mcp connect` to authorize again."
         )
+
+
+def spotify_app_fingerprint(settings: SpotifySettings) -> str:
+    """Identify the public OAuth app configuration that owns a renewable grant."""
+
+    identity = f"{settings.client_id}\0{settings.redirect_uri}".encode()
+    return hashlib.sha256(identity).hexdigest()
+
+
+def _require_app_binding(tokens: TokenSet, settings: SpotifySettings) -> None:
+    expected = spotify_app_fingerprint(settings)
+    if tokens.app_fingerprint == expected:
+        return
+    if tokens.app_fingerprint is None:
+        detail = "Saved Spotify credentials predate app binding"
+    else:
+        detail = "Saved Spotify credentials belong to different app configuration"
+    raise AuthenticationRequired(f"{detail}; run `spotify-mcp connect` to authorize again.")
 
 
 def _wait_for_loopback_callback(redirect_uri: str, timeout_seconds: float) -> str:

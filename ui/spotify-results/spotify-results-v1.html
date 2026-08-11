@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify results</title>
+</head>
+<body>
+  <header class="header">
+    <div class="heading">
+      <span class="mark" aria-hidden="true"></span>
+      <h1 id="title">Spotify results</h1>
+    </div>
+    <div id="device" class="device"></div>
+  </header>
+  <p id="summary" class="summary">Preparing results...</p>
+  <main id="results" class="results" aria-labelledby="title" aria-describedby="summary"></main>
+  <p id="feedback" class="feedback" aria-live="polite"></p>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

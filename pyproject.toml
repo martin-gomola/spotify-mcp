@@ -15,6 +15,11 @@ dependencies = [
   "python-dotenv>=1.1,<2",
 ]
 
+[project.urls]
+Homepage = "https://github.com/martin-gomola/spotify-mcp"
+Repository = "https://github.com/martin-gomola/spotify-mcp"
+Issues = "https://github.com/martin-gomola/spotify-mcp/issues"
+
 [project.scripts]
 spotify-mcp = "spotify_mcp.cli:main"
 

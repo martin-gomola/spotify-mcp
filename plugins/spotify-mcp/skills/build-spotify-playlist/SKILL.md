@@ -29,9 +29,11 @@ Use exact Spotify URIs and finish with an observed playlist, not an optimistic s
 5. Re-read the entire result and compare exact URIs and order. Return the playlist URL, track list,
    arc, skipped candidates, and verification state.
 
-When the client supports MCP Apps, `spotify_render_results` may present the final selected tracks
-as clickable cards. Call it only after the source tools and verification reads; the renderer is not
-a discovery or verification step.
+When the client supports MCP Apps, prefer `spotify_render_results` for the final verified playable
+entities. Its cards can start the exact track, album, artist, or playlist on a selected device and
+report one observed playback read; they never discover, rank, verify source data, or substitute an
+entity. Episodes and shows remain link/queue flows. Return canonical Markdown links when MCP Apps
+are unavailable.
 
 For DJ flow, start with the read-only `spotify_dj_audit`, then run `spotify_dj_analyze` and
 `spotify_dj_plan`. Analysis enriches recordings automatically and accepts exact overrides when

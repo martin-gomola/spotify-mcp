@@ -39,15 +39,26 @@ have Premium, allows up to five authenticated users, and requires other users to
 See Spotify's [quota modes documentation](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
 for the current restrictions.
 
-## Install
+## Guided setup
 
-From the repository root, create the ignored local environment file:
+From the repository root, run:
 
 ```bash
-cp .env.example .env
+uv run spotify-mcp init
 ```
 
-Set the client ID in `.env`:
+The command prompts for the client ID, saves the public app configuration outside the repository,
+opens Spotify's PKCE approval page only when the saved grant cannot be reused, and verifies the
+connected account. A healthy result contains `"status": "ready"` plus concise plugin next steps.
+
+For scripts or other non-interactive environments, pass the client ID explicitly:
+
+```bash
+uv run spotify-mcp init --client-id your_spotify_client_id
+```
+
+Interactive prompting is intentionally disabled when stdin is not a terminal, so unattended setup
+fails clearly instead of hanging. You can alternatively create the ignored local `.env` file:
 
 ```dotenv
 SPOTIFY_CLIENT_ID=your_spotify_client_id
@@ -55,21 +66,22 @@ SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
 The file is ignored by Git. A Spotify client ID is a public application identifier, but keeping
-machine-specific configuration in `.env` makes startup simpler and avoids committing it by
+machine-specific configuration in `.env` can be useful for development and avoids committing it by
 accident. Never add a client secret or OAuth token to `.env`.
 
-## Complete one-time setup
+## Reconnect and verify
 
-Connect when necessary and verify live Spotify access without leaving a server running:
+After guided setup, reconnect when necessary and verify live Spotify access without leaving a
+server running:
 
 ```bash
 make setup
 ```
 
-On the first setup, Spotify MCP opens the Spotify approval page and listens temporarily on
-`127.0.0.1:8888` for the callback. After approval it saves renewable tokens in an OS-appropriate
-private configuration file. Later `make setup` calls reuse or refresh that grant, verify the account,
-and return to the shell without opening the browser.
+When authentication is missing, Spotify MCP opens the Spotify approval page and listens temporarily
+on `127.0.0.1:8888` for the callback. After approval it saves renewable tokens in an OS-appropriate
+private configuration file. Later `init` or `make setup` calls reuse or refresh that grant, verify
+the account, and return to the shell without opening the browser.
 
 Use `make auth` when you explicitly want to replace or reconnect the saved grant. Use `make doctor`
 for a standalone live-access check.

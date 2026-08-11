@@ -92,6 +92,25 @@ def test_rate_limit_honors_zero_retry_after_then_succeeds(tmp_path: Path) -> Non
     assert calls == 3
 
 
+def test_rate_limited_write_is_not_retried(tmp_path: Path) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, headers={"Retry-After": "0"}, text="slow down")
+
+    with pytest.raises(SpotifyRequestError, match=r"failed \(429\)"):
+        _run_request(
+            tmp_path,
+            httpx.MockTransport(handler),
+            method="PUT",
+            path="me/player/play",
+            json={"uris": ["spotify:track:1"]},
+        )
+    assert calls == 1
+
+
 def test_transient_get_is_retried_but_write_is_not(tmp_path: Path) -> None:
     get_calls = 0
 

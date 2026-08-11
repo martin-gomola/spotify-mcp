@@ -177,7 +177,12 @@ def load_settings(
     without retaining ``SPOTIFY_CLIENT_ID`` in the shell.
     """
 
-    saved = load_app_config(app_config_path)
+    try:
+        saved = load_app_config(app_config_path)
+    except SpotifyConfigError:
+        if client_id is None:
+            raise
+        saved = None
     resolved_client_id = (
         client_id
         or _nonblank_env("SPOTIFY_CLIENT_ID")

@@ -16,6 +16,7 @@ from spotify_mcp.adapters.spotify.oauth import (
     TokenStore,
     create_pkce_request,
     parse_authorization_callback,
+    spotify_app_fingerprint,
 )
 from spotify_mcp.config import SpotifySettings
 from spotify_mcp.domain.errors import AuthenticationRequired
@@ -101,6 +102,7 @@ def test_exchange_uses_public_client_pkce_without_client_secret(tmp_path: Path) 
             tokens = await oauth.exchange_code("code", code_verifier="verifier")
             assert tokens.expires_at == 160.0
             assert set((tokens.scope or "").split()) == set(REQUIRED_SCOPES)
+            assert tokens.app_fingerprint == spotify_app_fingerprint(_settings(tmp_path))
 
     asyncio.run(scenario())
     assert captured["client_id"] == ["client"]
@@ -112,7 +114,8 @@ def test_concurrent_expired_token_reads_share_one_refresh(tmp_path: Path) -> Non
     settings = _settings(tmp_path)
     store = TokenStore(settings.token_path)
     granted_scopes = " ".join(REQUIRED_SCOPES)
-    store.save(TokenSet("old", "refresh", 0.0, granted_scopes))
+    fingerprint = spotify_app_fingerprint(settings)
+    store.save(TokenSet("old", "refresh", 0.0, granted_scopes, app_fingerprint=fingerprint))
     calls = 0
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -135,7 +138,9 @@ def test_concurrent_expired_token_reads_share_one_refresh(tmp_path: Path) -> Non
 
     asyncio.run(scenario())
     assert calls == 1
-    assert store.load() == TokenSet("new", "refresh", 3700.0, granted_scopes)
+    assert store.load() == TokenSet(
+        "new", "refresh", 3700.0, granted_scopes, app_fingerprint=fingerprint
+    )
 
 
 def test_existing_token_missing_new_scope_requires_authorization_upgrade(tmp_path: Path) -> None:
@@ -144,7 +149,15 @@ def test_existing_token_missing_new_scope_requires_authorization_upgrade(tmp_pat
     old_scopes = " ".join(
         scope for scope in REQUIRED_SCOPES if scope != "user-read-playback-position"
     )
-    store.save(TokenSet("access", "refresh", 10_000.0, old_scopes))
+    store.save(
+        TokenSet(
+            "access",
+            "refresh",
+            10_000.0,
+            old_scopes,
+            app_fingerprint=spotify_app_fingerprint(settings),
+        )
+    )
 
     async def scenario() -> None:
         oauth = SpotifyOAuth(settings, token_store=store, clock=lambda: 100.0)
@@ -160,10 +173,42 @@ def test_existing_token_missing_new_scope_requires_authorization_upgrade(tmp_pat
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("fingerprint", [None, "different-app"])
+def test_saved_token_must_match_current_app_before_use(
+    tmp_path: Path, fingerprint: str | None
+) -> None:
+    settings = _settings(tmp_path)
+    store = TokenStore(settings.token_path)
+    store.save(
+        TokenSet(
+            "access",
+            "refresh",
+            10_000.0,
+            " ".join(REQUIRED_SCOPES),
+            app_fingerprint=fingerprint,
+        )
+    )
+
+    async def scenario() -> None:
+        oauth = SpotifyOAuth(settings, token_store=store, clock=lambda: 100.0)
+        try:
+            with pytest.raises(AuthenticationRequired, match=r"app.*spotify-mcp connect"):
+                await oauth.ensure_access_token()
+        finally:
+            await oauth.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_invalid_grant_clears_saved_token(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     store = TokenStore(settings.token_path)
-    tokens = TokenSet("old", "dead", 0.0)
+    tokens = TokenSet(
+        "old",
+        "dead",
+        0.0,
+        app_fingerprint=spotify_app_fingerprint(settings),
+    )
     store.save(tokens)
 
     def handler(request: httpx.Request) -> httpx.Response:

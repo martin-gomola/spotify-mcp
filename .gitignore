@@ -19,3 +19,4 @@ htmlcov/
 credentials.json
 tokens.json
 .spotify-mcp/
+node_modules/

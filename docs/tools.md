@@ -1,7 +1,7 @@
 # Tool catalog
 
-Spotify MCP exposes 53 structured tools. Asterisks in the input column mark required fields; all
-other inputs are optional and use the defaults shown below.
+Spotify MCP exposes 57 model-visible structured tools. Asterisks in the input column mark required
+fields; all other inputs are optional and use the defaults shown below.
 
 ## Status and discovery
 
@@ -52,7 +52,7 @@ pretend that an accepted track-play request proves unsupported episode playback.
 | `spotify_now_playing` | None | Spotify read | Return playback state, current item, device, progress, shuffle, and repeat state. |
 | `spotify_devices` | None | Spotify read | List available Spotify Connect devices. |
 | `spotify_queue` | `limit=10` | Spotify read | Return the current item and up to 50 queued items. |
-| `spotify_play` | `uri` or `item_type` + `item_id`, `device_id`, `offset` | Spotify write | Start a track, album, artist, or playlist. For a track, `offset` is milliseconds; for a context it is the item position. |
+| `spotify_play` | `uri`, `item_type` + `item_id`, or `query` + `item_type`; `device_id`, `offset` | Spotify read, then conditional write for queries; Spotify write for exact identity | Start a track, album, artist, or playlist. Query playback writes only when the top ten results contain exactly one exact name or exact name-and-artist match; otherwise it returns URI-preserving candidates for explicit selection. For a track, `offset` is milliseconds; for a context it is the item position. |
 | `spotify_resume` | `device_id` | Spotify write | Resume playback. |
 | `spotify_pause` | `device_id` | Spotify write | Pause playback. |
 | `spotify_next` | `device_id` | Spotify write | Skip to the next item. |
@@ -60,10 +60,17 @@ pretend that an accepted track-play request proves unsupported episode playback.
 | `spotify_add_to_queue` | `uri` or `item_type` + `item_id`, `device_id` | Spotify write | Queue one `track` or podcast `episode`. |
 | `spotify_set_volume` | `volume_percent*`, `device_id` | Spotify write | Set device volume from 0 through 100. |
 | `spotify_adjust_volume` | `adjustment*`, `device_id` | Spotify write | Add or subtract relative volume on the selected device, clamped to 0 through 100. |
+| `spotify_seek` | `position_ms*`, `device_id` | Idempotent Spotify write | Seek to an exact non-negative millisecond position in the current item. |
+| `spotify_set_shuffle` | `state*`, `device_id` | Idempotent Spotify write | Enable or disable shuffle. |
+| `spotify_set_repeat` | `repeat_state*`, `device_id` | Idempotent Spotify write | Set repeat to `track`, `context`, or `off`. |
+| `spotify_transfer_playback` | `device_id*`, `play=false` | Idempotent Spotify write | Transfer Spotify Connect to one explicit controllable device, optionally starting playback. |
 
-When `device_id` is omitted, the server uses the active device or the first available device. It
-transfers Spotify Connect to the selected device when necessary. Playback write results mean
-Spotify accepted the API request; they are not a subsequent playback-state verification.
+When `device_id` is omitted, the server uses the active controllable device or the only
+controllable device. When multiple inactive controllable devices exist, it returns an error that
+requires an explicit `device_id`; restricted devices and devices without IDs are never selected.
+It transfers Spotify Connect to an unambiguous selected device when necessary. Playback write
+results mean Spotify accepted the API request; they are not a subsequent playback-state
+verification.
 
 ## Liked Songs
 
@@ -158,11 +165,20 @@ preview, live snapshot, and target order are acceptable.
 
 | Tool | Inputs | Effect | Purpose |
 | --- | --- | --- | --- |
-| `spotify_render_results` | `title*`, `items*` | Local read-only presentation | Render 1–50 already-selected Spotify entities as compact clickable cards in clients that support MCP Apps. |
+| `spotify_render_results` | `title*`, `items*` | Local presentation; optional inline playback | Render 1–50 already-selected Spotify entities as compact cards in clients that support MCP Apps. |
 
-Call the relevant data tools first, then pass only the final display-ready entities to
-`spotify_render_results`. The renderer performs no Spotify or third-party request. Clients without
-MCP Apps support still receive the same structured JSON and text fallback.
+Call the relevant data tools first, then prefer `spotify_render_results` for final, verified lists
+of playable entities. Track, album, artist, and playlist cards can start the exact canonical entity
+on an explicit usable device. When Spotify reports more than one controllable device, the card view
+requires a device choice even if one is currently marked active. A card says **Playing** only after
+one fresh read matches the requested item or context and device; an unverified result is shown
+without retrying the write. Episodes and shows remain link-only, and every card keeps a secondary
+**Open in Spotify** action.
+
+The renderer performs no discovery, ranking, verification of source data, or entity substitution.
+Its two resource-bound playback controls are app-visible discovery surfaces and are intentionally
+excluded from the model-facing tool count; that visibility metadata is not server authorization.
+Clients without MCP Apps support still receive structured JSON, text, and canonical Spotify links.
 
 ## Safety and result states
 

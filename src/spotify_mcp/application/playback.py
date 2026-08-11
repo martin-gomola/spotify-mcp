@@ -8,14 +8,26 @@ from typing import Any, Literal, cast
 import anyio
 from pydantic import BaseModel, ConfigDict, Field
 
+from spotify_mcp.application.discovery import DiscoveryService, SearchItem
 from spotify_mcp.application.ports import SpotifyGateway
 from spotify_mcp.domain.links import spotify_uri, spotify_url_from_uri, spotify_web_url
 
 PlayableType = Literal["track", "album", "artist", "playlist"]
 QueueableType = Literal["track", "episode"]
 PlaybackItemType = Literal["track", "episode", "unknown"]
+RepeatState = Literal["track", "context", "off"]
 PlaybackOperation = Literal[
-    "play", "resume", "pause", "next", "previous", "add_to_queue", "set_volume"
+    "play",
+    "resume",
+    "pause",
+    "next",
+    "previous",
+    "add_to_queue",
+    "set_volume",
+    "seek",
+    "set_shuffle",
+    "set_repeat",
+    "transfer_playback",
 ]
 
 
@@ -53,6 +65,7 @@ class NowPlaying(Model):
     progress_ms: int | None = None
     shuffle_state: bool | None = None
     repeat_state: str | None = None
+    context_uri: str | None = None
     device: Device | None = None
     item: PlaybackItem | None = None
 
@@ -64,11 +77,27 @@ class PlaybackQueue(Model):
 
 class PlaybackResult(Model):
     operation: PlaybackOperation
-    status: Literal["accepted"] = "accepted"
+    status: Literal["accepted", "needs_selection", "no_match"] = "accepted"
     device_id: str | None = None
     uri: str | None = None
     spotify_url: str | None = None
     volume_percent: int | None = None
+    position_ms: int | None = None
+    shuffle_state: bool | None = None
+    repeat_state: RepeatState | None = None
+    play: bool | None = None
+    query: str | None = None
+    query_type: PlayableType | None = None
+    resolved_entity: SearchItem | None = None
+    candidates: list[SearchItem] = Field(default_factory=list)
+
+
+class ObservedPlaybackResult(Model):
+    operation: Literal["play"] = "play"
+    status: Literal["verified", "unverified"]
+    requested_uri: str
+    device_id: str
+    observed: NowPlaying
 
 
 class VolumeAdjustmentResult(Model):
@@ -162,6 +191,7 @@ class PlaybackService:
             progress_ms=_integer(payload.get("progress_ms")),
             shuffle_state=_boolean(payload.get("shuffle_state")),
             repeat_state=_string(payload.get("repeat_state")),
+            context_uri=_string(_mapping(payload.get("context")).get("uri")),
             device=_device(payload.get("device")),
             item=_playback_item(payload.get("item")),
         )
@@ -194,17 +224,134 @@ class PlaybackService:
     async def play(
         self,
         *,
+        query: str | None = None,
         uri: str | None = None,
         item_type: PlayableType | None = None,
         item_id: str | None = None,
         device_id: str | None = None,
         offset: int | None = None,
     ) -> PlaybackResult:
+        if query is not None:
+            if uri is not None or item_id is not None:
+                raise ValueError("query cannot be combined with uri or item_id")
+            if item_type is None:
+                raise ValueError("item_type is required with query")
+            return await self._play_query(
+                query=query,
+                item_type=item_type,
+                device_id=device_id,
+                offset=offset,
+            )
         resolved_uri = self._resolve_uri(uri, item_type, item_id)
-        resolved_type = resolved_uri.split(":", maxsplit=2)[1]
         if offset is not None and offset < 0:
             raise ValueError("offset must be non-negative")
         device = await self._ensure_active_device(device_id)
+        await self._start_playback(resolved_uri, device_id=device, offset=offset)
+        return PlaybackResult(
+            operation="play",
+            device_id=device,
+            uri=resolved_uri,
+            spotify_url=spotify_url_from_uri(resolved_uri),
+        )
+
+    async def _play_query(
+        self,
+        *,
+        query: str,
+        item_type: PlayableType,
+        device_id: str | None,
+        offset: int | None,
+    ) -> PlaybackResult:
+        if offset is not None and offset < 0:
+            raise ValueError("offset must be non-negative")
+        normalized_query = " ".join(query.split())
+        results = await DiscoveryService(self._spotify).search(
+            normalized_query, item_type, limit=10
+        )
+        candidates = [
+            item.model_copy(
+                update={
+                    "uri": spotify_uri(item_type, item.uri or item.id),
+                    "spotify_url": spotify_web_url(
+                        item_type,
+                        item.uri or item.id,
+                        external_url=item.spotify_url,
+                    ),
+                }
+            )
+            for item in results.items
+        ]
+        exact_matches = [
+            item for item in candidates if self._query_matches_item(normalized_query, item)
+        ]
+        if len(exact_matches) != 1:
+            return PlaybackResult(
+                operation="play",
+                status="no_match" if not candidates else "needs_selection",
+                query=normalized_query,
+                query_type=item_type,
+                candidates=candidates,
+            )
+
+        resolved = exact_matches[0]
+        assert resolved.uri is not None
+        played = await self.play(
+            uri=resolved.uri,
+            device_id=device_id,
+            offset=offset,
+        )
+        return played.model_copy(
+            update={
+                "query": normalized_query,
+                "query_type": item_type,
+                "resolved_entity": resolved,
+            }
+        )
+
+    async def play_and_observe(
+        self,
+        *,
+        uri: str,
+        device_id: str | None,
+    ) -> ObservedPlaybackResult:
+        """Start one exact entity on one explicit device and observe the resulting state once."""
+
+        if device_id is None:
+            raise ValueError("device_id is required for direct play")
+        resolved_uri = self._resolve_uri(uri, None, None)
+        devices = (await self.devices()).devices
+        selected = next((device for device in devices if device.id == device_id), None)
+        if selected is None:
+            raise ValueError(f"Spotify device not found: {device_id}")
+        if selected.is_restricted:
+            raise ValueError(f"Spotify device cannot be controlled: {selected.name}")
+
+        await self._start_playback(resolved_uri, device_id=device_id)
+        observed = await self.now_playing()
+        resolved_type = resolved_uri.split(":", maxsplit=2)[1]
+        observed_matches = (
+            observed.item is not None and observed.item.uri == resolved_uri
+            if resolved_type == "track"
+            else observed.context_uri == resolved_uri
+        )
+        device_matches = observed.device is not None and observed.device.id == device_id
+        return ObservedPlaybackResult(
+            status="verified"
+            if observed.is_playing and device_matches and observed_matches
+            else "unverified",
+            requested_uri=resolved_uri,
+            device_id=device_id,
+            observed=observed,
+        )
+
+    async def _start_playback(
+        self,
+        resolved_uri: str,
+        *,
+        device_id: str,
+        offset: int | None = None,
+    ) -> None:
+        resolved_type = resolved_uri.split(":", maxsplit=2)[1]
         body: dict[str, Any]
         if resolved_type == "track":
             body = {"uris": [resolved_uri]}
@@ -215,13 +362,7 @@ class PlaybackService:
             if offset is not None:
                 body["offset"] = {"position": offset}
         await self._spotify.request(
-            "PUT", "/me/player/play", params={"device_id": device}, json=body
-        )
-        return PlaybackResult(
-            operation="play",
-            device_id=device,
-            uri=resolved_uri,
-            spotify_url=spotify_url_from_uri(resolved_uri),
+            "PUT", "/me/player/play", params={"device_id": device_id}, json=body
         )
 
     async def resume(self, *, device_id: str | None = None) -> PlaybackResult:
@@ -281,6 +422,53 @@ class PlaybackService:
             operation="set_volume", device_id=device, volume_percent=volume_percent
         )
 
+    async def seek(self, position_ms: int, *, device_id: str | None = None) -> PlaybackResult:
+        if position_ms < 0:
+            raise ValueError("position_ms must be non-negative")
+        device = await self._ensure_active_device(device_id)
+        await self._spotify.request(
+            "PUT",
+            "/me/player/seek",
+            params={"position_ms": position_ms, "device_id": device},
+        )
+        return PlaybackResult(operation="seek", device_id=device, position_ms=position_ms)
+
+    async def set_shuffle(self, state: bool, *, device_id: str | None = None) -> PlaybackResult:
+        device = await self._ensure_active_device(device_id)
+        await self._spotify.request(
+            "PUT",
+            "/me/player/shuffle",
+            params={"state": state, "device_id": device},
+        )
+        return PlaybackResult(operation="set_shuffle", device_id=device, shuffle_state=state)
+
+    async def set_repeat(
+        self, repeat_state: RepeatState, *, device_id: str | None = None
+    ) -> PlaybackResult:
+        if repeat_state not in {"track", "context", "off"}:
+            raise ValueError("repeat_state must be track, context, or off")
+        device = await self._ensure_active_device(device_id)
+        await self._spotify.request(
+            "PUT",
+            "/me/player/repeat",
+            params={"state": repeat_state, "device_id": device},
+        )
+        return PlaybackResult(operation="set_repeat", device_id=device, repeat_state=repeat_state)
+
+    async def transfer_playback(self, device_id: str, *, play: bool = False) -> PlaybackResult:
+        devices = (await self.devices()).devices
+        selected = next((device for device in devices if device.id == device_id), None)
+        if selected is None:
+            raise ValueError(f"Spotify device not found: {device_id}")
+        if selected.is_restricted:
+            raise ValueError(f"Spotify device cannot be controlled: {selected.name}")
+        await self._spotify.request(
+            "PUT",
+            "/me/player",
+            json={"device_ids": [device_id], "play": play},
+        )
+        return PlaybackResult(operation="transfer_playback", device_id=device_id, play=play)
+
     async def adjust_volume(
         self, adjustment: int, *, device_id: str | None = None
     ) -> VolumeAdjustmentResult:
@@ -324,11 +512,30 @@ class PlaybackService:
         )
         if preferred_id is not None and preferred is None:
             raise ValueError(f"Spotify device not found: {preferred_id}")
-        selected = preferred or next(
-            (device for device in available if device.is_active), available[0]
-        )
-        if selected.id is None:
-            raise ValueError(f"Spotify device has no usable ID: {selected.name}")
+        if preferred is not None and preferred.is_restricted:
+            raise ValueError(f"Spotify device cannot be controlled: {preferred.name}")
+
+        usable = [
+            device for device in available if device.id is not None and not device.is_restricted
+        ]
+        if not usable:
+            raise ValueError(
+                "No controllable Spotify devices found. Open Spotify on a device first."
+            )
+        active = next((device for device in usable if device.is_active), None)
+        if preferred is not None:
+            selected = preferred
+        elif active is not None:
+            selected = active
+        elif len(usable) == 1:
+            selected = usable[0]
+        else:
+            choices = ", ".join(f"{device.name} ({device.id})" for device in usable)
+            raise ValueError(
+                "Multiple Spotify devices are available; provide device_id to choose one. "
+                f"Available: {choices}."
+            )
+        assert selected.id is not None
 
         if not selected.is_active:
             await self._spotify.request(
@@ -336,6 +543,21 @@ class PlaybackService:
             )
             await anyio.sleep(0.6)
         return selected
+
+    @staticmethod
+    def _normalized_name(value: str) -> str:
+        return " ".join(value.casefold().split())
+
+    @classmethod
+    def _query_matches_item(cls, query: str, item: SearchItem) -> bool:
+        normalized_query = cls._normalized_name(query)
+        normalized_name = cls._normalized_name(item.name)
+        accepted_queries = {normalized_name}
+        for artist in item.artists:
+            normalized_artist = cls._normalized_name(artist)
+            accepted_queries.add(f"{normalized_name} {normalized_artist}")
+            accepted_queries.add(f"{normalized_name} by {normalized_artist}")
+        return normalized_query in accepted_queries
 
     @staticmethod
     def _resolve_uri(uri: str | None, item_type: PlayableType | None, item_id: str | None) -> str:

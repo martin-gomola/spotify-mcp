@@ -8,7 +8,8 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-2F855A.svg)](LICENSE)
 ![Spotify MCP](https://img.shields.io/badge/Spotify-MCP-1DB954?logo=spotify&logoColor=white)
 
-[Get started](#get-started) · [See what you can ask](#what-can-i-ask) · [Setup guide](docs/setup.md)
+[Get started](#get-started) · [Codex plugin guide](plugins/spotify-mcp/README.md) ·
+[See what you can ask](#what-can-i-ask) · [Setup guide](docs/setup.md)
 
 </div>
 
@@ -27,6 +28,8 @@ playlist into a DJ running order.
 
 ## ✨ What it can do
 
+- 🎶 **Play naturally:** resolve a precise track, album, artist, or playlist from a query, control
+  seek, shuffle, repeat, volume, queue, and Spotify Connect devices.
 - 🎧 **Find music from your library:** search your full Liked Songs history, including tracks you
   saved years ago.
 - 🧩 **Build with safeguards:** bundled workflows preserve Spotify track identities. They stop
@@ -47,10 +50,10 @@ cd spotify-mcp
 cp .env.example .env
 ```
 
-### 🔑 2. Add your Spotify Client ID
+### 🔑 2. Configure Spotify
 
 Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), add
-`http://127.0.0.1:8888/callback` as its Redirect URI, then put the Client ID in `.env`:
+`http://127.0.0.1:8888/callback` as its Redirect URI, then put its Client ID in `.env`:
 
 ```dotenv
 SPOTIFY_CLIENT_ID=your_client_id
@@ -58,14 +61,15 @@ SPOTIFY_CLIENT_ID=your_client_id
 
 The [setup guide](docs/setup.md) covers the dashboard steps and Spotify Development Mode limits.
 
-### 🔌 3. Connect Codex
+### 🔌 3. Install for Codex
 
 ```bash
 make codex-install
 ```
 
 Approve the Spotify page that opens, then start a new Codex task. Codex starts the local server when
-you use it, so you can close the setup terminal.
+you use it, so you can close the setup terminal. The [Codex plugin guide](plugins/spotify-mcp/README.md)
+explains how the plugin starts the server, what it includes, and what to ask first.
 
 ## 🛡️ Safety by default
 
@@ -99,6 +103,7 @@ Codex. For local development and verification, follow the
 ## 📚 Learn more
 
 - 🚀 [Setup and troubleshooting](docs/setup.md)
+- 🧩 [Codex plugin guide](plugins/spotify-mcp/README.md)
 - 🧰 [Available Spotify tools](docs/tools.md)
 - 🧭 [Architecture and data flow](docs/architecture.md)
 - 🧪 [Development and verification](docs/development.md)
