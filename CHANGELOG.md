@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- Normalized half/double-time BPM readings before candidate transition scoring and exposed the
+  effective tempo evidence in generated plans.
+
 ## 0.5.0
 
 - Extended the existing DJ analyze, plan, and apply workflow to generate new playlists from exact

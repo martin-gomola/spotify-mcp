@@ -411,6 +411,52 @@ def test_transition_cost_uses_exact_specification_components() -> None:
     assert result.cost == 9.5
 
 
+def test_transition_cost_uses_half_time_normalized_tempo() -> None:
+    first = track("a", 0, energy=0.5, bpm=86, camelot="8A", artist="one")
+    second = track("b", 1, energy=0.5, bpm=171, camelot="8A", artist="two")
+
+    result = transition_cost(first, second)
+
+    assert result.bpm_delta == 0.5
+    assert result.cost == 0.75
+    assert result.from_normalized_bpm == 86
+    assert result.to_normalized_bpm == 85.5
+
+
+def test_transition_cost_normalizes_the_small_set_half_time_track() -> None:
+    first = track("feel", 0, energy=0.924, bpm=127.937, camelot="9B", artist="Calvin")
+    second = track("lights", 1, energy=0.73, bpm=171.001, camelot="3B", artist="Weeknd")
+
+    result = transition_cost(first, second)
+
+    assert result.from_normalized_bpm == 127.937
+    assert result.to_normalized_bpm == 85.5005
+    assert result.bpm_delta == 42.4365
+    assert result.cost == 86.62475
+
+
+def test_transition_planner_starts_with_lowest_normalized_tempo() -> None:
+    analysis = DjAnalysis(
+        playlist_id=None,
+        playlist_name="Generated",
+        snapshot_id=None,
+        source_kind="candidates",
+        tracks=(
+            track("slow", 0, energy=0.5, bpm=86, camelot="8A", artist="one"),
+            track("double", 1, energy=0.5, bpm=171, camelot="8A", artist="two"),
+            track("fast", 2, energy=0.5, bpm=120, camelot="8A", artist="three"),
+        ),
+    )
+
+    plan = plan_transition_set(analysis, "analysis-1")
+
+    assert plan.target_order[:2] == (
+        "spotify:track:double#0",
+        "spotify:track:slow#0",
+    )
+    assert plan.transitions[0].bpm_delta == 0.5
+
+
 def test_transition_planner_is_deterministic_and_starts_at_lowest_tempo() -> None:
     analysis = DjAnalysis(
         playlist_id=None,

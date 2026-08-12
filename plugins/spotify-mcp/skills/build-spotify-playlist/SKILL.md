@@ -48,8 +48,9 @@ For an existing-playlist DJ flow, start with the read-only `spotify_dj_audit`, t
 For a new set, call `spotify_dj_analyze` with `candidates` containing exact track IDs/URIs or search
 queries. It resolves exact recordings, uses Spotify audio evidence with free ReccoBeats fallback,
 and reports incomplete candidates instead of inventing values. Then call `spotify_dj_plan`; its
-`auto` strategy uses deterministic BPM/Camelot/energy transition costs for candidates. Preview the
-plan and use `spotify_dj_apply` only after mutation is explicitly requested. Candidate apply creates
+`auto` strategy uses deterministic normalized-BPM/Camelot/energy transition costs for candidates,
+including half/double-time tempo normalization. Preview the plan and use `spotify_dj_apply` only
+after mutation is explicitly requested. Candidate apply creates
 the playlist once and verifies visibility plus every URI position; creation receipts cannot be
 restored.
 

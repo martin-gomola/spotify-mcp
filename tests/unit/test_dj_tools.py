@@ -77,6 +77,13 @@ async def test_dj_tools_expose_field_level_output_schemas() -> None:
         "transition-cost",
     ]
     assert tools["spotify_dj_plan"].input_schema["properties"]["strategy"]["default"] == "auto"
+    planned_track_schema = plan_schema["$defs"]["DjPlannedTrackResult"]
+    assert "normalized_bpm" in planned_track_schema["properties"]
+    transition_schema = plan_schema["$defs"]["DjTransitionResult"]
+    assert {
+        "from_normalized_bpm",
+        "to_normalized_bpm",
+    } <= set(transition_schema["properties"])
 
     apply_schema = tools["spotify_dj_apply"].output_schema
     assert apply_schema is not None

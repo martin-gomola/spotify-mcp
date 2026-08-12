@@ -153,8 +153,10 @@ first in `auto`; a 403 or 404 falls back to the free ReccoBeats API. Explicit `o
 policies. Candidate analysis uses `skip`, reports exact missing fields, and requires at least two
 complete tracks before storing an artifact. Duplicate occurrences remain distinct.
 
-Candidate transition planning starts with the lowest raw BPM, energy, and input position. Each next
-track minimizes `BPM difference × 1.5 + Camelot penalty + energy difference × 5`. Camelot costs are
+Candidate transition planning starts with the lowest normalized BPM, energy, and input position. Each next
+track minimizes `normalized BPM difference × 1.5 + Camelot penalty + energy difference × 5`.
+Tempo is normalized into the 80–160 BPM band before scoring, so half/double-time readings such as
+171 BPM are compared at 85.5 BPM. Raw and normalized BPM remain visible in the plan. Camelot costs are
 0 for an exact match, 2 for an adjacent number on the same side, 3 for relative major/minor, and
 `10 + 2 × circular distance` otherwise. The plan returns ordered recording evidence, every
 transition cost, and the total cost.

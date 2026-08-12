@@ -93,6 +93,7 @@ class DjPlannedTrackResult(BaseModel):
     name: str
     artists: list[str]
     bpm: float | None = Field(default=None, gt=0)
+    normalized_bpm: float | None = Field(default=None, gt=0)
     energy: float | None = Field(default=None, ge=0, le=1)
     camelot: str | None
     sources: list[str]
@@ -105,6 +106,8 @@ class DjTransitionResult(BaseModel):
     energy_delta: float = Field(ge=0, le=1)
     key_penalty: float = Field(ge=0)
     cost: float = Field(ge=0)
+    from_normalized_bpm: float | None = Field(default=None, gt=0)
+    to_normalized_bpm: float | None = Field(default=None, gt=0)
 
 
 class DjAnalysisResult(BaseModel):

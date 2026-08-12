@@ -124,6 +124,7 @@ class PlannedTrack:
     name: str = "Unknown"
     artists: tuple[str, ...] = ()
     bpm: float | None = None
+    normalized_bpm: float | None = None
     energy: float | None = None
     camelot: str | None = None
     sources: tuple[str, ...] = ()
@@ -139,6 +140,8 @@ class DjTransition:
     energy_delta: float
     key_penalty: float
     cost: float
+    from_normalized_bpm: float | None = None
+    to_normalized_bpm: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,7 +196,7 @@ def normalize_tempo(bpm: float) -> float:
         normalized *= 2
     while normalized > 160:
         normalized /= 2
-    return round(normalized, 3)
+    return normalized
 
 
 def occurrence_tokens(identities: list[str] | tuple[str, ...]) -> tuple[str, ...]:
@@ -273,6 +276,7 @@ def plan_dj_set(
                 name=selected.name,
                 artists=selected.artists,
                 bpm=selected.bpm,
+                normalized_bpm=selected.normalized_bpm,
                 energy=selected.energy,
                 camelot=selected.camelot,
                 sources=selected.sources,
@@ -328,7 +332,9 @@ def transition_cost(previous: DjTrack, candidate: DjTrack) -> DjTransition:
         raise ValueError("previous track has incomplete transition features")
     if candidate.bpm is None or candidate.energy is None or candidate.camelot is None:
         raise ValueError("candidate track has incomplete transition features")
-    bpm_delta = abs(previous.bpm - candidate.bpm)
+    previous_tempo = _transition_tempo(previous)
+    candidate_tempo = _transition_tempo(candidate)
+    bpm_delta = abs(previous_tempo - candidate_tempo)
     energy_delta = abs(previous.energy - candidate.energy)
     key_penalty = transition_key_penalty(previous.camelot, candidate.camelot)
     cost = _transition_cost_value(previous, candidate)
@@ -339,6 +345,8 @@ def transition_cost(previous: DjTrack, candidate: DjTrack) -> DjTransition:
         energy_delta=round(energy_delta, 6),
         key_penalty=key_penalty,
         cost=round(cost, 6),
+        from_normalized_bpm=previous_tempo,
+        to_normalized_bpm=candidate_tempo,
     )
 
 
@@ -360,7 +368,7 @@ def plan_transition_set(analysis: DjAnalysis, analysis_id: str) -> DjPlan:
     current = min(
         remaining,
         key=lambda track: (
-            float(track.bpm or 0),
+            _transition_tempo(track),
             float(track.energy or 0),
             track.original_position,
             track.position_token,
@@ -409,6 +417,7 @@ def plan_transition_set(analysis: DjAnalysis, analysis_id: str) -> DjPlan:
                 name=track.name,
                 artists=track.artists,
                 bpm=track.bpm,
+                normalized_bpm=_transition_tempo(track),
                 energy=track.energy,
                 camelot=track.camelot,
                 sources=track.sources,
@@ -444,10 +453,16 @@ def _transition_cost_value(previous: DjTrack, candidate: DjTrack) -> float:
     if candidate.bpm is None or candidate.energy is None or candidate.camelot is None:
         raise ValueError("candidate track has incomplete transition features")
     return (
-        abs(previous.bpm - candidate.bpm) * 1.5
+        abs(_transition_tempo(previous) - _transition_tempo(candidate)) * 1.5
         + transition_key_penalty(previous.camelot, candidate.camelot)
         + abs(previous.energy - candidate.energy) * 5.0
     )
+
+
+def _transition_tempo(track: DjTrack) -> float:
+    if track.bpm is None:
+        raise ValueError("track has no tempo")
+    return normalize_tempo(track.bpm)
 
 
 def _candidate_score(
