@@ -29,21 +29,54 @@ and returned as a playable Spotify card.</sub>
 
 ## 💬 What can I ask?
 
-> Play something I’ll like.
+Spotify MCP includes skills for playlist curation and Liked Songs cleanup. Copy a prompt below.
+Codex reads the required pages, preserves exact recordings, and checks the result after each write.
 
-> Build me a road-trip playlist that rediscovers music from across my Liked Songs history.
+**Audit your complete Liked Songs library**
 
-You can also search for music and podcasts, control playback, review your Liked Songs, or turn a
-playlist into a DJ running order.
+```text
+Audit all my Liked Songs for exact duplicates, alternate recordings, live versions, remasters,
+and unavailable tracks. Show the exact keep/remove pairs and explain the evidence, but do not
+remove anything.
+```
+
+**Rediscover music buried in years of listening history**
+
+```text
+Build me a three-hour road-trip playlist from across my full Liked Songs history. Keep the mix
+varied across house, funk, indie, rock, and hip-hop, shape it into chapters, and verify the final
+playlist track by track.
+```
+
+**Reshape an existing playlist without losing its character**
+
+```text
+Keep every track in my Road Trip playlist, add 25 songs that fit its existing taste, then order the
+whole playlist into waves with intentional energy resets. Show me the proposed arc before changing
+the playlist.
+```
+
+**Plan a DJ running order**
+
+```text
+Audit my House Party playlist for duplicates, missing tempo data, and awkward transitions. Plan a
+DJ order that warms up, builds, peaks late, and closes with at least three tracks between the same
+artist. Create a preview. Do not apply it yet.
+```
+
+You can also search music and podcasts, inspect your queue, control Spotify Connect devices, and
+show verified results as playable cards inside Codex.
 
 ## ✨ What it can do
 
-- 🎶 **Play naturally:** resolve a precise track, album, artist, or playlist from a query, control
+- 🎶 **Control playback:** resolve a precise track, album, artist, or playlist from a query, control
   seek, shuffle, repeat, volume, queue, and Spotify Connect devices.
 - 🖼️ **Act on visual results:** present the final verified selection as compact, playable cards in
   Codex.
 - 🎧 **Find music from your library:** search your full Liked Songs history, including tracks you
   saved years ago.
+- 🩺 **Run Library Doctor:** audit exact duplicates, alternate recordings, live and remastered
+  versions, unavailable saves, and cleanup candidates before removing anything.
 - 🧩 **Build with safeguards:** bundled workflows preserve Spotify track identities. They stop
   after an uncertain write and preview DJ reorders before they change a playlist.
 

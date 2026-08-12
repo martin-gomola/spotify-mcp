@@ -1,6 +1,6 @@
 # MCP tools for Spotify in Codex
 
-Use Spotify naturally from Codex: search music and podcasts, control playback, rediscover music
+Use Spotify from Codex: search music and podcasts, control playback, rediscover music
 across Liked Songs, build verified playlists, and plan snapshot-safe DJ running orders. Results
 include canonical Spotify links and can appear as compact cards inside Codex.
 
@@ -55,17 +55,46 @@ before Codex starts:
 export SPOTIFY_MCP_REPO=/absolute/path/to/spotify-mcp
 ```
 
-## Example requests
+## Try a bundled workflow
 
-- “Build a road-trip playlist from across my Liked Songs history.”
-- “Audit my Liked Songs and show possible alternate recordings without changing anything.”
-- “What is playing, and what is next in my queue?”
-- “Find podcasts about design and show the best episodes as clickable cards.”
-- “Rediscover music from my taste without calling it a Spotify recommendation.”
-- “Plan a DJ running order that peaks late, but do not apply it.”
-- “Audit this whole playlist, then preview a BPM and energy sort.”
+Ask in plain language. Codex selects the matching skill and tools.
 
-The plugin includes dedicated skills for initial setup, playlist building, and Liked Songs audits.
+### Spotify Library Doctor
+
+```text
+Audit all my Liked Songs for exact duplicates, alternate recordings, live versions, remasters,
+and unavailable tracks. Show the exact keep/remove pairs and explain the evidence, but do not
+remove anything.
+```
+
+Library Doctor scans each page of your library. It separates alternate recordings from distinct
+versions and waits for your approval before removing an exact recording.
+
+### Taste-aware playlist builder
+
+```text
+Build me a three-hour road-trip playlist from across my full Liked Songs history. Keep the mix
+varied, shape it into chapters with intentional energy resets, and verify the final playlist track
+by track.
+```
+
+The playlist skill can preserve existing tracks while it adds music. It can also propose a new
+order and wait for your approval before writing it to Spotify.
+
+### Snapshot-safe DJ planner
+
+```text
+Audit my House Party playlist for duplicates, missing tempo data, and awkward transitions. Plan a
+DJ order that warms up, builds, peaks late, and closes with at least three tracks between
+the same artist. Create a preview. Do not apply it yet.
+```
+
+The DJ workflow checks tempo and energy coverage, previews the exact new order, and refuses to
+change a playlist that has become stale. If you apply the plan, it keeps a receipt for restoration.
+
+You can also ask “What is playing, and what is next in my queue?” or “Find podcasts about design
+and show the best episodes as clickable cards.” A setup skill handles authentication and local
+server problems.
 
 ## Safety boundaries
 

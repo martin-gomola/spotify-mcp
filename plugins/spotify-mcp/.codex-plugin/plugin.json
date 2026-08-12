@@ -9,8 +9,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Spotify",
-    "shortDescription": "Use Spotify naturally and safely from Codex.",
-    "longDescription": "Search music and podcasts, control Spotify, rediscover music across your full Liked Songs history, build verified playlists, and plan snapshot-safe DJ running orders. Results include canonical Spotify links and optional interactive cards. Credentials stay on your machine and uncertain writes are never retried blindly.",
+    "shortDescription": "Use Spotify from Codex.",
+    "longDescription": "Search music and podcasts, control Spotify, rediscover music across your full Liked Songs history, build verified playlists, and plan snapshot-safe DJ running orders. Results include canonical Spotify links and optional interactive cards. Credentials stay on your machine. Codex reads the current Spotify state before it responds to an uncertain write result.",
     "developerName": "Martin Gomola",
     "category": "Productivity",
     "websiteURL": "https://github.com/martin-gomola/spotify-mcp",
@@ -19,8 +19,8 @@
     "composerIcon": "./assets/composer-icon.png",
     "logo": "./assets/logo.png",
     "defaultPrompt": [
-      "Play something I'll like",
-      "Build me a road-trip playlist that rediscovers music from across my Liked Songs history"
+      "Audit my complete Liked Songs library for duplicates and alternate recordings. Create a preview. Do not remove anything.",
+      "Build me a three-hour road-trip playlist from across my Liked Songs history, keep it varied, and verify the final order."
     ]
   }
 }
