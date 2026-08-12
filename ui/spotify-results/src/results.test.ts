@@ -102,6 +102,27 @@ beforeEach(() => {
 });
 
 describe("SpotifyResultsView", () => {
+  it("normalizes raw Spotify search results before rendering controls", async () => {
+    const bridge = bridgeWith(contextResult());
+    await new SpotifyResultsView(bridge).render({
+      title: "Latest release",
+      items: [
+        {
+          type: "track",
+          name: "Everybody Scream",
+          spotify_url: "https://open.spotify.com/track/track-1",
+          artists: ["Florence + The Machine"],
+          album: "Everybody Scream",
+        },
+      ],
+    });
+
+    expect(document.querySelector(".meta")?.textContent).toBe(
+      "track — Florence + The Machine • Everybody Scream",
+    );
+    expect(document.querySelector("button.play")?.textContent).toBe("Play");
+  });
+
   it("renders Play for playable items and keeps episodes link-only", async () => {
     const bridge = bridgeWith(contextResult());
     await new SpotifyResultsView(bridge).render(TRACKS);

@@ -6,16 +6,20 @@
   <title>Spotify results</title>
 </head>
 <body>
-  <header class="header">
-    <div class="heading">
-      <span class="mark" aria-hidden="true"></span>
-      <h1 id="title">Spotify results</h1>
-    </div>
-    <div id="device" class="device"></div>
-  </header>
-  <p id="summary" class="summary">Preparing results...</p>
-  <main id="results" class="results" aria-labelledby="title" aria-describedby="summary"></main>
-  <p id="feedback" class="feedback" aria-live="polite"></p>
+  <div class="app-shell">
+    <header class="header">
+      <div class="heading">
+        <span class="mark" aria-hidden="true"></span>
+        <div class="heading-copy">
+          <h1 id="title">Spotify results</h1>
+          <p id="summary" class="summary">Preparing results...</p>
+        </div>
+      </div>
+      <div id="device" class="device"></div>
+    </header>
+    <main id="results" class="results" aria-labelledby="title" aria-describedby="summary"></main>
+    <p id="feedback" class="feedback" aria-live="polite"></p>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

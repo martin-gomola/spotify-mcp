@@ -142,7 +142,9 @@ def _timeout(settings: SpotifySettings) -> httpx.Timeout:
 
 
 def _read_success_body(response: httpx.Response) -> Any:
-    if response.status_code == 204 or not response.content:
+    if response.status_code == 204 or not response.content.strip():
+        return None
+    if "json" not in response.headers.get("Content-Type", "").lower():
         return None
     try:
         return response.json()

@@ -73,17 +73,80 @@ interface CardView {
 }
 
 const PLAYABLE_KINDS = new Set<ResultKind>(["track", "album", "artist", "playlist"]);
+const RESULT_KINDS = new Set<ResultKind>([
+  "track",
+  "album",
+  "artist",
+  "playlist",
+  "episode",
+  "show",
+]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isResultsPayload(value: unknown): value is SpotifyResultsPayload {
-  return (
-    isObject(value)
-    && typeof value.title === "string"
-    && Array.isArray(value.items)
-  );
+function textList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && Boolean(item))
+    : [];
+}
+
+function normalizeResultItem(value: unknown): SpotifyResultItem | null {
+  if (!isObject(value)) return null;
+  const kind = value.kind ?? value.type;
+  if (
+    typeof value.name !== "string"
+    || typeof value.spotify_url !== "string"
+    || typeof kind !== "string"
+    || !RESULT_KINDS.has(kind as ResultKind)
+  ) {
+    return null;
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value.spotify_url);
+  } catch {
+    return null;
+  }
+  const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+  if (
+    parsedUrl.protocol !== "https:"
+    || parsedUrl.hostname !== "open.spotify.com"
+    || parsedUrl.port
+    || parsedUrl.username
+    || parsedUrl.password
+    || parsedUrl.search
+    || parsedUrl.hash
+    || pathParts.length !== 2
+    || pathParts[0] !== kind
+    || !pathParts[1]
+  ) {
+    return null;
+  }
+  const suppliedSubtitle = typeof value.subtitle === "string" ? value.subtitle.trim() : "";
+  const derivedSubtitle = [
+    textList(value.artists).join(", "),
+    typeof value.album === "string" ? value.album : "",
+    typeof value.owner === "string" ? value.owner : "",
+    typeof value.release_date === "string" ? value.release_date : "",
+  ].filter(Boolean).join(" • ");
+  return {
+    name: value.name,
+    spotify_url: value.spotify_url,
+    subtitle: suppliedSubtitle || derivedSubtitle || null,
+    kind: kind as ResultKind,
+    reason: typeof value.reason === "string" ? value.reason : null,
+  };
+}
+
+function normalizeResultsPayload(value: unknown): SpotifyResultsPayload | null {
+  if (!isObject(value) || typeof value.title !== "string" || !Array.isArray(value.items)) {
+    return null;
+  }
+  const items = value.items.map(normalizeResultItem);
+  if (items.some((item) => item === null)) return null;
+  return { title: value.title, items: items as SpotifyResultItem[] };
 }
 
 function payloadKey(payload: SpotifyResultsPayload): string {
@@ -119,6 +182,12 @@ function addText(parent: HTMLElement, className: string, value: string | null | 
   parent.appendChild(element);
 }
 
+function requireElement(selector: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(selector);
+  if (!el) throw new Error(`SpotifyResultsView: required element "${selector}" not found`);
+  return el;
+}
+
 export class SpotifyResultsView {
   readonly #bridge: ResultsBridge;
   readonly #title: HTMLElement;
@@ -135,26 +204,27 @@ export class SpotifyResultsView {
 
   constructor(bridge: ResultsBridge) {
     this.#bridge = bridge;
-    this.#title = document.querySelector<HTMLElement>("#title")!;
-    this.#device = document.querySelector<HTMLElement>("#device")!;
-    this.#summary = document.querySelector<HTMLElement>("#summary")!;
-    this.#results = document.querySelector<HTMLElement>("#results")!;
-    this.#feedback = document.querySelector<HTMLElement>("#feedback")!;
+    this.#title = requireElement("#title");
+    this.#device = requireElement("#device");
+    this.#summary = requireElement("#summary");
+    this.#results = requireElement("#results");
+    this.#feedback = requireElement("#feedback");
   }
 
   render(payload: unknown): Promise<void> {
-    if (!isResultsPayload(payload)) return Promise.resolve();
-    const nextPayloadKey = payloadKey(payload);
+    const normalizedPayload = normalizeResultsPayload(payload);
+    if (!normalizedPayload) return Promise.resolve();
+    const nextPayloadKey = payloadKey(normalizedPayload);
     if (nextPayloadKey === this.#lastPayloadKey) {
       return this.#lastRender ?? Promise.resolve();
     }
     this.#lastPayloadKey = nextPayloadKey;
     const revision = ++this.#renderRevision;
-    this.#title.textContent = payload.title;
-    this.#summary.textContent = `${payload.items.length} result${payload.items.length === 1 ? "" : "s"}`;
+    this.#title.textContent = normalizedPayload.title;
+    this.#summary.textContent = `${normalizedPayload.items.length} result${normalizedPayload.items.length === 1 ? "" : "s"}`;
     this.#feedback.replaceChildren();
     this.#results.replaceChildren();
-    this.#cards = payload.items.map((item) => this.#renderCard(item));
+    this.#cards = normalizedPayload.items.map((item) => this.#renderCard(item));
     this.#lastRender = this.#loadContext(revision);
     return this.#lastRender;
   }
@@ -189,7 +259,7 @@ export class SpotifyResultsView {
       playButton.setAttribute("aria-label", `Play ${item.name}${item.subtitle ? ` — ${item.subtitle}` : ""}`);
       playButton.addEventListener("click", () => {
         if (card.getAttribute("aria-current") === "true") {
-          void this.#pause(status);
+          void this.#pauseCurrentCard();
         } else {
           void this.#play(item, status);
         }
@@ -218,8 +288,8 @@ export class SpotifyResultsView {
       const result = await this.#bridge.callServerTool("spotify_results_context", {});
       if (revision !== this.#renderRevision) return;
       if (result.isError || !isObject(result.structuredContent)) {
-        this.#setFeedback(toolErrorMessage(result), "error");
         this.#device.textContent = "Playback unavailable";
+        this.#setContextError(toolErrorMessage(result), revision);
         return;
       }
       const context = result.structuredContent as unknown as ResultsContext;
@@ -227,8 +297,25 @@ export class SpotifyResultsView {
     } catch {
       if (revision !== this.#renderRevision) return;
       this.#device.textContent = "Playback unavailable";
-      this.#setFeedback("Spotify playback controls are unavailable in this client.", "error");
+      this.#setContextError("Spotify playback controls are unavailable in this client.", revision);
     }
+  }
+
+  #setContextError(message: string, revision: number): void {
+    this.#feedback.replaceChildren();
+    const text = document.createTextNode(message);
+    this.#feedback.appendChild(text);
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "retry";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      this.#feedback.replaceChildren();
+      delete this.#feedback.dataset.state;
+      void this.#loadContext(revision);
+    }, { once: true });
+    this.#feedback.appendChild(retry);
+    this.#feedback.dataset.state = "error";
   }
 
   #applyContext(context: ResultsContext): void {
@@ -318,8 +405,11 @@ export class SpotifyResultsView {
     }
   }
 
-  async #pause(status: HTMLParagraphElement): Promise<void> {
+  async #pauseCurrentCard(): Promise<void> {
     if (this.#inFlight || !this.#selectedDeviceId) return;
+    const current = this.#cards.find((card) => card.element.getAttribute("aria-current") === "true");
+    if (!current) return;
+    const { status } = current;
     this.#inFlight = true;
     status.textContent = "Pausing...";
     status.dataset.state = "starting";

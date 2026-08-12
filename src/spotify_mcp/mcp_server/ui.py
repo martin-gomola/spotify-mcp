@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from importlib.resources import files
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlsplit
 
 from mcp.server.apps import Apps, ResourceCsp
@@ -60,6 +61,35 @@ class SpotifyResultCard(BaseModel):
     subtitle: str | None = Field(default=None, max_length=300)
     kind: Literal["track", "album", "artist", "playlist", "episode", "show"]
     reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_search_item(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        normalized = dict(value)
+        if "kind" not in normalized and isinstance(normalized.get("type"), str):
+            normalized["kind"] = normalized["type"]
+        if not normalized.get("subtitle"):
+            artists = normalized.get("artists")
+            artist_text = (
+                ", ".join(artist for artist in artists if isinstance(artist, str) and artist)
+                if isinstance(artists, list)
+                else ""
+            )
+            details = [
+                detail
+                for detail in (
+                    artist_text,
+                    normalized.get("album"),
+                    normalized.get("owner"),
+                    normalized.get("release_date"),
+                )
+                if isinstance(detail, str) and detail
+            ]
+            if details:
+                normalized["subtitle"] = " • ".join(details)
+        return normalized
 
     @field_validator("spotify_url")
     @classmethod

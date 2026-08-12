@@ -78,6 +78,18 @@ def test_empty_success_returns_none(tmp_path: Path) -> None:
     assert _run_request(tmp_path, transport, method="PUT", path="me/player/pause") is None
 
 
+def test_whitespace_only_success_returns_none(tmp_path: Path) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"\n"))
+    assert _run_request(tmp_path, transport, method="PUT", path="me/player/pause") is None
+
+
+def test_opaque_player_command_success_returns_none(tmp_path: Path) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, content=b"opaque-player-command-token")
+    )
+    assert _run_request(tmp_path, transport, method="PUT", path="me/player/pause") is None
+
+
 def test_rate_limit_honors_zero_retry_after_then_succeeds(tmp_path: Path) -> None:
     calls = 0
 

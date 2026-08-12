@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -160,6 +162,59 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
     assert "textContent" in html
     assert "innerHTML" not in html
     assert "noopener noreferrer" in html
+    assert "--radius-container:12px" in html
+    assert "--radius-control:8px" in html
+    assert ".play.is-pause" in html
+
+
+def test_results_ui_uses_even_pixel_spacing_and_radii() -> None:
+    css = Path("ui/spotify-results/src/styles.css").read_text(encoding="utf-8")
+    declarations = re.findall(
+        r"(?:margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|gap|border-radius)\s*:\s*([^;]+)",
+        css,
+    )
+    pixel_values = [
+        int(value)
+        for declaration in declarations
+        for value in re.findall(r"(?<![.\d])(\d+)px", declaration)
+    ]
+
+    assert pixel_values
+    assert all(value % 2 == 0 for value in pixel_values)
+
+
+@pytest.mark.anyio
+async def test_results_ui_normalizes_raw_search_items() -> None:
+    apps = create_results_apps()
+    server: MCPServer[None] = MCPServer("test", extensions=[apps])
+
+    async with Client(server) as client:
+        rendered = await client.call_tool(
+            "spotify_render_results",
+            {
+                "title": "Latest release",
+                "items": [
+                    {
+                        "type": "track",
+                        "name": "Everybody Scream",
+                        "spotify_url": "https://open.spotify.com/track/track-1",
+                        "artists": ["Florence + The Machine"],
+                        "album": "Everybody Scream",
+                    }
+                ],
+            },
+        )
+
+    assert rendered.is_error is False
+    assert rendered.structured_content["items"] == [
+        {
+            "name": "Everybody Scream",
+            "spotify_url": "https://open.spotify.com/track/track-1",
+            "subtitle": "Florence + The Machine • Everybody Scream",
+            "kind": "track",
+            "reason": None,
+        }
+    ]
 
 
 @pytest.mark.anyio

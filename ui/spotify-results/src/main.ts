@@ -52,6 +52,9 @@ window.addEventListener("openai:set_globals", (event) => {
   renderWhenConnected(detail?.globals?.toolOutput ?? window.openai?.toolOutput);
 });
 
+// app.connect() may fire "toolinput" synchronously before returning,
+// so listeners must be registered first. The connected flag + pending
+// buffer above ensure any such event is captured and flushed below.
 await app.connect();
 connected = true;
 

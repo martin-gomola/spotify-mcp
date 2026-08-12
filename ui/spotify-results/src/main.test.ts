@@ -53,9 +53,11 @@ it("renders the first result from tool input and deduplicates the later tool res
     title: "Top song",
     items: [
       {
+        type: "track",
         name: "Track One",
         spotify_url: "https://open.spotify.com/track/track-1",
-        kind: "track",
+        artists: ["Artist One"],
+        album: "Album One",
       },
     ],
   };
@@ -65,7 +67,21 @@ it("renders the first result from tool input and deduplicates the later tool res
   const app = appState.instances[0]!;
   await vi.waitFor(() => expect(document.querySelector("#title")?.textContent).toBe("Top song"));
   expect(document.querySelectorAll(".card")).toHaveLength(1);
+  expect(document.querySelector("button.play")?.textContent).toBe("Play");
 
-  app.listeners.get("toolresult")!({ structuredContent: structuredClone(payload) });
+  app.listeners.get("toolresult")!({
+    structuredContent: {
+      title: "Top song",
+      items: [
+        {
+          name: "Track One",
+          spotify_url: "https://open.spotify.com/track/track-1",
+          subtitle: "Artist One • Album One",
+          kind: "track",
+          reason: null,
+        },
+      ],
+    },
+  });
   await vi.waitFor(() => expect(app.callServerTool).toHaveBeenCalledTimes(1));
 });
