@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create a private Spotify podcast"
+  short_description: "Turn documents into private Spotify audio"
+  default_prompt: "Use $create-private-spotify-podcast to turn my document into a private Spotify podcast."

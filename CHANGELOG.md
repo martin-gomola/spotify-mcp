@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0
+
+- Added an optional `make codex-install-bundle` path and composition skill for private spoken-word
+  episodes through Spotify's external Save to Spotify companion and local Kokoro speech.
+- Added a 45-second generated-audio guard so short compatibility episodes do not stall in Spotify
+  processing; short scripts return to approval instead of being padded with silence.
+- Hardened private-podcast uploads with source-rights confirmation and clean single-stream MP3
+  validation that keeps cover art and inherited metadata out of the audio container.
+- Added a verified private-playlist visibility stop: public mismatches fall back to the private show
+  without adding the episode, retrying privacy, or creating duplicate playlists.
+- Added `manage-private-spotify-podcasts` for exact, confirmed, and readback-verified deletion of
+  unwanted private Save to Spotify episodes without incidental playlist mutations.
+- Made Spotify-side episode processing explicit before and after upload, with periodic status
+  updates and truthful delayed-processing results instead of false plugin failures or early writes.
+- Added one routed catalog tool for exact tracks, artists, and artist releases.
+- Consolidated track and album library actions into exact URI-based tools that also support shows,
+  episodes, and audiobooks.
+- Added an intent router skill and shortened repeated server instructions to reduce unnecessary tool
+  context; the public catalog now has 55 tools instead of 57.
+
 ## 0.3.0
 
 - Added ambiguity-safe query playback plus seek, shuffle, repeat, and explicit Spotify Connect

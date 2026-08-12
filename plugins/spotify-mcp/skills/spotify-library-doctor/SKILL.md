@@ -13,6 +13,7 @@ Audit first. A vague cleanup request authorizes a preview, not deletion.
    entries, and no-action observations. Absence from recent or top listening is not a removal reason.
 3. Give candidates stable labels and show the proposed keep/remove pair, evidence, and uncertainty.
 4. Apply only labels or exact URIs the user explicitly approved. Re-read candidate pages immediately
-   before calling `spotify_library_remove`; abort if identity or ordering changed.
+   before calling `spotify_library_remove` with full exact track URIs; abort if identity or ordering
+   changed.
 5. Re-scan after removal. Prove approved URIs are absent, keep URIs remain, and the count changed as
    expected. The server has no automatic undo for Liked Songs removal.

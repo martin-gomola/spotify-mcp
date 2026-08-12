@@ -8,8 +8,8 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-2F855A.svg)](LICENSE)
 ![Spotify MCP](https://img.shields.io/badge/Spotify-MCP-1DB954?logo=spotify&logoColor=white)
 
-[Get started](#get-started) · [Codex plugin guide](plugins/spotify-mcp/README.md) ·
-[See what you can ask](#what-can-i-ask) · [Setup guide](docs/setup.md)
+[Get started](#get-started) · [See what you can ask](#what-can-i-ask) ·
+[Setup guide](docs/setup.md)
 
 </div>
 
@@ -27,9 +27,30 @@ Spotify Connect device, start the exact result, or open its canonical Spotify pa
 <sub>A real Codex result: a 90-minute playlist created from Liked Songs, verified track by track,
 and returned as a playable Spotify card.</sub>
 
+## 🎙️ Your documents, private on Spotify
+
+The optional bundle turns a document, PDF, notes, or transcript into a polished private Spotify
+episode. Codex plans the chapters, lets you approve the script and local preview, narrates with free
+local Kokoro speech, uploads through Spotify's official Save to Spotify companion, and waits until
+Spotify reports the episode ready. No TTS API key is required.
+
+```bash
+make codex-install-bundle
+```
+
+The basic Spotify MCP and Save to Spotify keep separate authorization grants and private token
+stores. Generated episodes remain in a private Spotify show, and the bundle includes safe,
+readback-verified deletion when you no longer want one.
+
+![A private Kokoro-generated episode created by the Spotify MCP bundle and finished in Spotify](docs/assets/private-podcast-show.png)
+
+<sub>A real bundle result: locally generated speech, private Spotify hosting, cover art, episode
+description, and completed Spotify processing.</sub>
+
 ## 💬 What can I ask?
 
-Spotify MCP includes skills for playlist curation and Liked Songs cleanup. Copy a prompt below.
+Spotify MCP routes ordinary requests through compact, progressive guidance that avoids broad tool
+discovery. Playlist curation and Liked Songs cleanup keep dedicated workflows. Copy a prompt below.
 Codex reads the required pages, preserves exact recordings, and checks the result after each write.
 
 **Audit your complete Liked Songs library**
@@ -64,6 +85,13 @@ DJ order that warms up, builds, peaks late, and closes with at least three track
 artist. Create a preview. Do not apply it yet.
 ```
 
+**Turn a document into a private Spotify episode**
+
+```text
+Turn this document into a private spoken-word episode I can listen to on Spotify. Use local Kokoro
+speech, show me the chapter plan and preview first, then save it to my private Spotify show.
+```
+
 You can also search music and podcasts, inspect your queue, control Spotify Connect devices, and
 show verified results as playable cards inside Codex.
 
@@ -79,6 +107,13 @@ show verified results as playable cards inside Codex.
   versions, unavailable saves, and cleanup candidates before removing anything.
 - 🧩 **Build with safeguards:** bundled workflows preserve Spotify track identities. They stop
   after an uncertain write and preview DJ reorders before they change a playlist.
+- 🎙️ **Create private spoken-word episodes:** the optional bundle turns documents into polished
+  Spotify audio with local Kokoro speech and no TTS API key. It can also list and safely delete an
+  exact generated episode after confirmation.
+
+After a private episode uploads, Spotify may show it as `PROCESSING` for several minutes while its
+audio is prepared. The workflow reports that state and keeps playlist writes blocked until Spotify
+returns `READY`; a pending state is Spotify-side processing, not a plugin failure.
 
 You can shape a playlist around a mood or journey, then open the result in Spotify.
 
@@ -108,13 +143,23 @@ The [setup guide](docs/setup.md) covers the dashboard steps and Spotify Developm
 
 ### 🔌 3. Install for Codex
 
+Choose the setup you want:
+
 ```bash
-make codex-install
+make codex-install         # Basic Spotify MCP
+make codex-install-bundle  # Spotify MCP + Save to Spotify for private spoken-word episodes
 ```
 
-Approve the Spotify page that opens, then start a new Codex task. Codex starts the local server when
-you use it, so you can close the setup terminal. The [Codex plugin guide](plugins/spotify-mcp/README.md)
-explains how the plugin starts the server, what it includes, and what to ask first.
+The bundle installs Spotify's official Save to Spotify companion at the tested version and asks for
+a second, separate Spotify authorization. It needs no TTS API key: the podcast workflow offers the
+free local Kokoro voice engine on first use. The basic command does not install or configure the
+companion.
+
+The bundle also adds safe private-episode cleanup. Ask Codex to list your Save to Spotify episodes,
+then choose the exact episode to delete; deletion requires confirmation and a verified readback.
+
+Approve the Spotify page or pages that open, then start a new Codex task. Codex starts the local
+server when you use it, so you can close the setup terminal.
 
 ![Spotify plugin page in Codex with example prompts and local MCP server](docs/assets/codex-plugin-page.png)
 
@@ -145,12 +190,24 @@ directory. Each client uses its own configuration. This repository provides a gu
 Codex. For local development and verification, follow the
 [development guide](docs/development.md).
 
+The Codex plugin starts the same command over stdio through
+[`plugins/spotify-mcp/.mcp.json`](plugins/spotify-mcp/.mcp.json). It resolves this checkout at
+`~/dev/spotify-mcp` by default. If you keep it elsewhere, set the absolute path before starting
+Codex:
+
+```bash
+export SPOTIFY_MCP_REPO=/absolute/path/to/spotify-mcp
+```
+
+The plugin configuration contains no Spotify credentials. Spotify MCP and Save to Spotify retain
+separate authorization grants and private token stores outside the repository.
+
 </details>
 
 ## 📚 Learn more
 
 - 🚀 [Setup and troubleshooting](docs/setup.md)
-- 🧩 [Codex plugin guide](plugins/spotify-mcp/README.md)
+- 📁 [Installation layout and private runtime state](docs/installation-layout.md)
 - 🧰 [Available Spotify tools](docs/tools.md)
 - 🧭 [Architecture and data flow](docs/architecture.md)
 - 🧪 [Development and verification](docs/development.md)

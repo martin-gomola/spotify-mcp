@@ -1,0 +1,13 @@
+skill: use-spotify
+should_trigger:
+  - Show me the exact Spotify track for this URI.
+  - What is the latest album from this artist?
+  - Pause Spotify and add this episode to my queue.
+  - Save this album to my Spotify library.
+  - Show the tracks in my Morning Run playlist.
+should_not_trigger:
+  - Build me a three-hour road-trip playlist.
+  - Audit my Liked Songs for duplicate remasters.
+  - Spotify authentication is broken.
+  - Adjust the equalizer in Apple Music.
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

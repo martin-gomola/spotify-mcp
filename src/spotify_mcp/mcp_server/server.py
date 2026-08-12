@@ -17,6 +17,7 @@ from spotify_mcp.mcp_server.tools import (
     albums,
     audio,
     bpm_sort,
+    catalog,
     discovery,
     dj,
     dj_audit,
@@ -82,6 +83,7 @@ def create_server() -> MCPServer[AppContext]:
 
     for module in (
         discovery,
+        catalog,
         playback,
         library,
         albums,

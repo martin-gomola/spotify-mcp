@@ -7,15 +7,14 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from spotify_mcp.application.library import (
-    LibraryContainsResult,
-    LibraryMutationResult,
+    LibraryItemsContainsResult,
+    LibraryItemsMutationResult,
     SavedTracksPage,
     SavedTracksSample,
-    check_saved_tracks,
+    check_library_items,
     get_saved_tracks,
-    remove_saved_tracks,
+    mutate_library_items,
     sample_saved_tracks,
-    save_tracks,
 )
 from spotify_mcp.mcp_server.annotations import IDEMPOTENT_WRITE, READ_ONLY
 from spotify_mcp.mcp_server.context import AppContext
@@ -67,44 +66,47 @@ def register(server: MCPServer) -> None:
 
     @server.tool(
         name="spotify_library_contains",
-        title="Check Spotify Liked Songs",
-        description="Check whether exact Spotify track IDs are in the current user's Liked Songs.",
+        title="Check Spotify Library",
+        description="Check up to 40 exact track, album, show, episode, or audiobook URIs.",
         annotations=READ_ONLY,
         structured_output=True,
     )
     async def spotify_check_saved_tracks(
-        track_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
+        uris: Annotated[list[str], Field(min_length=1, max_length=40)],
         ctx: Context[AppContext],
-    ) -> LibraryContainsResult:
-        return await check_saved_tracks(ctx.request_context.lifespan_context.spotify, track_ids)
+    ) -> LibraryItemsContainsResult:
+        return await check_library_items(ctx.request_context.lifespan_context.spotify, uris)
 
     @server.tool(
         name="spotify_library_save",
-        title="Save Spotify Tracks",
+        title="Save Spotify Library Items",
         description=(
-            "Save exact Spotify track IDs to Liked Songs and re-read their state for verification."
+            "Save up to 40 exact track, album, show, episode, or audiobook URIs and verify."
         ),
         annotations=IDEMPOTENT_WRITE,
         structured_output=True,
     )
     async def spotify_save_tracks(
-        track_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
+        uris: Annotated[list[str], Field(min_length=1, max_length=40)],
         ctx: Context[AppContext],
-    ) -> LibraryMutationResult:
-        return await save_tracks(ctx.request_context.lifespan_context.spotify, track_ids)
+    ) -> LibraryItemsMutationResult:
+        return await mutate_library_items(
+            ctx.request_context.lifespan_context.spotify, "save", uris
+        )
 
     @server.tool(
         name="spotify_library_remove",
-        title="Remove Spotify Liked Songs",
+        title="Remove Spotify Library Items",
         description=(
-            "Remove exact Spotify track IDs from Liked Songs and re-read their state for "
-            "verification."
+            "Remove up to 40 exact track, album, show, episode, or audiobook URIs and verify."
         ),
         annotations=DESTRUCTIVE_IDEMPOTENT,
         structured_output=True,
     )
     async def spotify_remove_saved_tracks(
-        track_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
+        uris: Annotated[list[str], Field(min_length=1, max_length=40)],
         ctx: Context[AppContext],
-    ) -> LibraryMutationResult:
-        return await remove_saved_tracks(ctx.request_context.lifespan_context.spotify, track_ids)
+    ) -> LibraryItemsMutationResult:
+        return await mutate_library_items(
+            ctx.request_context.lifespan_context.spotify, "remove", uris
+        )

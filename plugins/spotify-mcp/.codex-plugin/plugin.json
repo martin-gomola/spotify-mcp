@@ -1,6 +1,6 @@
 {
   "name": "spotify-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first Spotify tools for music, podcasts, safe playlists, and DJ planning.",
   "author": { "name": "Martin Gomola" },
   "license": "MIT",
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "Spotify",
     "shortDescription": "Use Spotify from Codex.",
-    "longDescription": "Search music and podcasts, control Spotify, rediscover music across your full Liked Songs history, build verified playlists, and plan snapshot-safe DJ running orders. Results include canonical Spotify links and optional interactive cards. Credentials stay on your machine. Codex reads the current Spotify state before it responds to an uncertain write result.",
+    "longDescription": "Search music and podcasts, control Spotify, rediscover music across your full Liked Songs history, build verified playlists, plan snapshot-safe DJ running orders, and optionally create or safely delete private spoken-word episodes with the official Save to Spotify companion. Results include canonical Spotify links and optional interactive cards. Credentials stay in separate private stores on your machine. Codex reads the current Spotify state before it responds to an uncertain write result.",
     "developerName": "Martin Gomola",
     "category": "Productivity",
     "websiteURL": "https://github.com/martin-gomola/spotify-mcp",
@@ -20,7 +20,8 @@
     "logo": "./assets/logo.png",
     "defaultPrompt": [
       "Audit my complete Liked Songs library for duplicates and alternate recordings. Create a preview. Do not remove anything.",
-      "Build me a three-hour road-trip playlist from across my Liked Songs history, keep it varied, and verify the final order."
+      "Build me a three-hour road-trip playlist from across my Liked Songs history, keep it varied, and verify the final order.",
+      "Turn this document into a private spoken-word episode I can listen to on Spotify."
     ]
   }
 }

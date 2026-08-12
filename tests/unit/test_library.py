@@ -7,11 +7,10 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from spotify_mcp.application.library import (
-    check_saved_tracks,
+    check_library_items,
     get_saved_tracks,
-    remove_saved_tracks,
+    mutate_library_items,
     sample_saved_tracks,
-    save_tracks,
     stratified_sample_ranges,
 )
 from spotify_mcp.mcp_server.context import AppContext
@@ -102,50 +101,66 @@ async def test_sample_saved_tracks_reuses_first_page_and_preserves_offsets() -> 
 
 
 @pytest.mark.anyio
-async def test_contains_uses_current_library_endpoint_and_exact_uris() -> None:
-    spotify = FakeSpotify([[True, False]])
-
-    result = await check_saved_tracks(spotify, ["a", "spotify:track:b"])
-
-    assert result.saved == [True, False]
-    assert spotify.calls == [
-        (
-            "GET",
-            "/me/library/contains",
-            {"uris": "spotify:track:a,spotify:track:b"},
-            None,
-        )
+async def test_generic_library_routes_preserve_supported_exact_uris() -> None:
+    uris = [
+        "spotify:track:a",
+        "spotify:album:b",
+        "spotify:show:c",
+        "spotify:episode:d",
+        "spotify:audiobook:e",
     ]
+    spotify = FakeSpotify([[True, False, True, False, True]])
+
+    result = await check_library_items(spotify, uris)
+
+    assert result.uris == uris
+    assert result.saved == [True, False, True, False, True]
+    assert spotify.calls == [("GET", "/me/library/contains", {"uris": ",".join(uris)}, None)]
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("response", [None, [], [False], [False, None]])
-async def test_contains_rejects_incomplete_or_malformed_evidence(response: Any) -> None:
-    spotify = FakeSpotify([response])
+async def test_generic_library_rejects_unsupported_and_bare_values() -> None:
+    spotify = FakeSpotify([])
 
-    with pytest.raises(Exception, match="malformed library membership evidence"):
-        await check_saved_tracks(spotify, ["a", "b"])
+    with pytest.raises(ValueError, match="full Spotify URI"):
+        await check_library_items(spotify, ["track-id"])
+    with pytest.raises(ValueError, match="unsupported library URI type"):
+        await check_library_items(spotify, ["spotify:artist:artist-id"])
+    with pytest.raises(ValueError, match="full Spotify URI"):
+        await check_library_items(spotify, ["spotify:track:a,spotify:album:b"])
+
+    assert spotify.calls == []
 
 
 @pytest.mark.anyio
-async def test_library_writes_verify_once_without_retrying() -> None:
+async def test_generic_library_mutations_verify_once() -> None:
+    uris = ["spotify:track:a", "spotify:album:b"]
     spotify = FakeSpotify([None, [True, False], None, [False, True]])
 
-    saved = await save_tracks(spotify, ["a", "b"])
-    removed = await remove_saved_tracks(spotify, ["a", "b"])
+    saved = await mutate_library_items(spotify, "save", uris)
+    removed = await mutate_library_items(spotify, "remove", uris)
 
     assert saved.status == "mismatch"
-    assert saved.mismatches == ["b: expected saved=True, observed saved=False"]
+    assert saved.mismatches == ["spotify:album:b: expected saved=True, observed saved=False"]
     assert removed.status == "mismatch"
-    assert removed.mismatches == ["b: expected saved=False, observed saved=True"]
+    assert removed.mismatches == ["spotify:album:b: expected saved=False, observed saved=True"]
     assert [call[0] for call in spotify.calls] == ["PUT", "GET", "DELETE", "GET"]
 
 
 @pytest.mark.anyio
-async def test_library_write_reports_failed_verification_as_ambiguous() -> None:
+@pytest.mark.parametrize("response", [None, [], [False], [False, None]])
+async def test_generic_library_contains_rejects_malformed_evidence(response: Any) -> None:
+    spotify = FakeSpotify([response])
+
+    with pytest.raises(Exception, match="malformed library membership evidence"):
+        await check_library_items(spotify, ["spotify:track:a", "spotify:album:b"])
+
+
+@pytest.mark.anyio
+async def test_generic_library_write_reports_failed_verification_as_ambiguous() -> None:
     spotify = FakeSpotify([None, RuntimeError("read unavailable")])
 
-    result = await save_tracks(spotify, ["a"])
+    result = await mutate_library_items(spotify, "save", ["spotify:track:a"])
 
     assert result.status == "ambiguous"
     assert result.warning == "Spotify accepted the write, but verification failed: read unavailable"
@@ -153,12 +168,12 @@ async def test_library_write_reports_failed_verification_as_ambiguous() -> None:
 
 
 @pytest.mark.anyio
-async def test_library_write_reports_ambiguous_transport_without_verification() -> None:
+async def test_generic_library_write_reports_ambiguous_transport_without_verification() -> None:
     from spotify_mcp.domain.errors import AmbiguousWrite
 
     spotify = FakeSpotify([AmbiguousWrite("write outcome unknown")])
 
-    result = await remove_saved_tracks(spotify, ["a"])
+    result = await mutate_library_items(spotify, "remove", ["spotify:album:a"])
 
     assert result.status == "ambiguous"
     assert result.warning == "write outcome unknown"

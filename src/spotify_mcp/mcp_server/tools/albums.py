@@ -3,31 +3,18 @@
 from typing import Annotated
 
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from spotify_mcp.application.albums import (
-    AlbumLibraryContainsResult,
-    AlbumLibraryMutationResult,
     AlbumsResult,
     AlbumTracksPage,
     SavedAlbumsPage,
-    check_saved_albums,
     get_album_tracks,
     get_albums,
     get_saved_albums,
-    remove_saved_albums,
-    save_albums,
 )
-from spotify_mcp.mcp_server.annotations import IDEMPOTENT_WRITE, READ_ONLY
+from spotify_mcp.mcp_server.annotations import READ_ONLY
 from spotify_mcp.mcp_server.context import AppContext
-
-DESTRUCTIVE_IDEMPOTENT = ToolAnnotations(
-    read_only_hint=False,
-    destructive_hint=True,
-    idempotent_hint=True,
-    open_world_hint=True,
-)
 
 
 def register(server: MCPServer) -> None:
@@ -84,48 +71,3 @@ def register(server: MCPServer) -> None:
         return await get_saved_albums(
             ctx.request_context.lifespan_context.spotify, limit=limit, offset=offset
         )
-
-    @server.tool(
-        name="spotify_album_library_contains",
-        title="Check Saved Spotify Albums",
-        description="Check whether exact Spotify album IDs are saved in the user's library.",
-        annotations=READ_ONLY,
-        structured_output=True,
-    )
-    async def spotify_check_saved_albums(
-        album_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
-        ctx: Context[AppContext],
-    ) -> AlbumLibraryContainsResult:
-        return await check_saved_albums(ctx.request_context.lifespan_context.spotify, album_ids)
-
-    @server.tool(
-        name="spotify_album_library_save",
-        title="Save Spotify Albums",
-        description=(
-            "Save exact Spotify album IDs through the current shared library endpoint and "
-            "verify the resulting state once."
-        ),
-        annotations=IDEMPOTENT_WRITE,
-        structured_output=True,
-    )
-    async def spotify_save_albums(
-        album_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
-        ctx: Context[AppContext],
-    ) -> AlbumLibraryMutationResult:
-        return await save_albums(ctx.request_context.lifespan_context.spotify, album_ids)
-
-    @server.tool(
-        name="spotify_album_library_remove",
-        title="Remove Saved Spotify Albums",
-        description=(
-            "Remove exact Spotify album IDs through the current shared library endpoint and "
-            "verify the resulting state once."
-        ),
-        annotations=DESTRUCTIVE_IDEMPOTENT,
-        structured_output=True,
-    )
-    async def spotify_remove_saved_albums(
-        album_ids: Annotated[list[str], Field(min_length=1, max_length=40)],
-        ctx: Context[AppContext],
-    ) -> AlbumLibraryMutationResult:
-        return await remove_saved_albums(ctx.request_context.lifespan_context.spotify, album_ids)

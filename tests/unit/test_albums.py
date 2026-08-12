@@ -7,12 +7,9 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from spotify_mcp.application.albums import (
-    check_saved_albums,
     get_album_tracks,
     get_albums,
     get_saved_albums,
-    remove_saved_albums,
-    save_albums,
 )
 from spotify_mcp.domain.errors import SpotifyRequestError
 from spotify_mcp.mcp_server.context import AppContext
@@ -109,70 +106,6 @@ async def test_saved_albums_preserve_added_timestamp_and_paging() -> None:
 
 
 @pytest.mark.anyio
-async def test_album_contains_uses_shared_library_endpoint_and_exact_uris() -> None:
-    spotify = FakeSpotify([[True, False]])
-
-    result = await check_saved_albums(spotify, ["a", "spotify:album:b"])
-
-    assert result.saved == [True, False]
-    assert spotify.calls == [
-        (
-            "GET",
-            "/me/library/contains",
-            {"uris": "spotify:album:a,spotify:album:b"},
-            None,
-        )
-    ]
-
-
-@pytest.mark.anyio
-async def test_album_library_writes_verify_once_without_blind_retry() -> None:
-    spotify = FakeSpotify([None, [True, False], None, [False, True]])
-
-    saved = await save_albums(spotify, ["a", "b"])
-    removed = await remove_saved_albums(spotify, ["a", "b"])
-
-    assert saved.status == "mismatch"
-    assert saved.mismatches == ["b: expected saved=True, observed saved=False"]
-    assert removed.status == "mismatch"
-    assert removed.mismatches == ["b: expected saved=False, observed saved=True"]
-    assert [call[0] for call in spotify.calls] == ["PUT", "GET", "DELETE", "GET"]
-    assert all("/me/albums" not in call[1] for call in spotify.calls)
-
-
-@pytest.mark.anyio
-async def test_album_write_reports_failed_verification_as_ambiguous() -> None:
-    spotify = FakeSpotify([None, RuntimeError("read unavailable")])
-
-    result = await save_albums(spotify, ["a"])
-
-    assert result.status == "ambiguous"
-    assert result.warning == "Spotify accepted the write, but verification failed: read unavailable"
-    assert len(spotify.calls) == 2
-
-
-@pytest.mark.anyio
-async def test_album_membership_rejects_short_evidence() -> None:
-    spotify = FakeSpotify([[]])
-
-    with pytest.raises(Exception, match="malformed album membership evidence"):
-        await check_saved_albums(spotify, ["a"])
-
-
-@pytest.mark.anyio
-async def test_album_write_reports_ambiguous_transport_without_verification() -> None:
-    from spotify_mcp.domain.errors import AmbiguousWrite
-
-    spotify = FakeSpotify([AmbiguousWrite("write outcome unknown")])
-
-    result = await remove_saved_albums(spotify, ["a"])
-
-    assert result.status == "ambiguous"
-    assert result.warning == "write outcome unknown"
-    assert len(spotify.calls) == 1
-
-
-@pytest.mark.anyio
 async def test_album_tools_are_structured_snake_case_and_accurately_annotated() -> None:
     server: MCPServer[AppContext] = MCPServer("test")
     register(server)
@@ -183,13 +116,6 @@ async def test_album_tools_are_structured_snake_case_and_accurately_annotated() 
         "spotify_albums",
         "spotify_album_tracks",
         "spotify_saved_albums",
-        "spotify_album_library_contains",
-        "spotify_album_library_save",
-        "spotify_album_library_remove",
     }
     assert all(tool.output_schema is not None for tool in tools.values())
     assert tools["spotify_albums"].annotations.read_only_hint is True
-    assert tools["spotify_album_library_save"].annotations.idempotent_hint is True
-    remove_annotations = tools["spotify_album_library_remove"].annotations
-    assert remove_annotations.destructive_hint is True
-    assert remove_annotations.idempotent_hint is True
