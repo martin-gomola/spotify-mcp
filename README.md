@@ -45,11 +45,17 @@ stores. Generated episodes remain in a private Spotify show, and the bundle incl
 readback-verified deletion when you no longer want one.
 
 <p align="center">
-  <img src="docs/assets/private-podcast-show.png" width="680" alt="A private Kokoro-generated episode created by the Spotify MCP bundle and finished in Spotify">
+  <img src="docs/assets/codex-private-podcast-prompt.png" width="619" alt="Codex prompt requesting a private Spotify audio tour of Villa Ephrussi with chapter and preview approval">
 </p>
 
-<sub>A real bundle result: locally generated speech, private Spotify hosting, cover art, episode
-description, and completed Spotify processing.</sub>
+<p align="center">
+  <img src="docs/assets/private-podcast-show.png" width="680" alt="A private Kokoro-narrated Villa Ephrussi tour guide created by the Spotify MCP bundle and ready in Spotify">
+</p>
+
+<sub>A real bundle result: a locally narrated Villa Ephrussi tour guide with private Spotify
+hosting, cover art, chapters, official source links, and completed processing.</sub>
+
+▶️ [Listen to chapter 1: A Villa Between Two Seas (MP3, 1:03)](docs/assets/villa-ephrussi-first-chapter.mp3)
 
 ## 💬 What can I ask?
 
