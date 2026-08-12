@@ -33,8 +33,11 @@ and returned as a playable Spotify card.</sub>
 
 The optional bundle turns a document, PDF, notes, or transcript into a polished private Spotify
 episode. Codex plans the chapters, lets you approve the script and local preview, narrates with free
-local Kokoro speech, uploads through Spotify's official Save to Spotify companion, and waits until
-Spotify reports the episode ready. No TTS API key is required.
+local Kokoro speech from a small model of about 340 MB, uploads through Spotify's official Save to
+Spotify companion, and waits until Spotify reports the episode ready. No TTS API key is required.
+
+I use it for automated morning briefings and as a travel guide. Before a trip, I turn my notes into
+an episode, download it, and listen offline while walking around.
 
 ```bash
 make codex-install-bundle
