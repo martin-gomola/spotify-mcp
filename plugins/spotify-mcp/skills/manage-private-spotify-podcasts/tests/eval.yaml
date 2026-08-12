@@ -14,7 +14,10 @@ cases:
   - name: explicit_confirmation
     prompt: "I found one matching private episode. Remove it."
     expectations:
-      - "Requests explicit confirmation containing the exact title and episode URI before the irreversible delete."
+      - "Prefers a structured confirmation containing the exact title, URI, show, and current status."
+      - "Offers exactly Delete episode - irreversible and Cancel, with the delete choice bound to the displayed URI."
+      - "Uses delete <exact-episode-uri> as the fallback only when structured choices are unavailable."
+      - "Does not ask for a second confirmation after the user clicks the delete choice."
       - "Deletes once with save-to-spotify --json episodes delete using the exact URI after confirmation."
   - name: exact_uri_explicit_delete
     prompt: "Delete spotify:episode:0nvFLZjGfcYamD5Zo0URRP now."

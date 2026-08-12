@@ -22,7 +22,9 @@
 Verified tracks, albums, artists, and playlists can appear as compact cards inside Codex. Choose a
 Spotify Connect device, start the exact result, or open its canonical Spotify page.
 
-![Codex creating and verifying a Spotify playlist, then presenting it as a playable result card with device selection](docs/assets/codex-playlist-result-card.png)
+<p align="center">
+  <img src="docs/assets/codex-playlist-result-card.png" width="680" alt="Codex creating and verifying a Spotify playlist, then presenting it as a playable result card with device selection">
+</p>
 
 <sub>A real Codex result: a 90-minute playlist created from Liked Songs, verified track by track,
 and returned as a playable Spotify card.</sub>
@@ -42,7 +44,9 @@ The basic Spotify MCP and Save to Spotify keep separate authorization grants and
 stores. Generated episodes remain in a private Spotify show, and the bundle includes safe,
 readback-verified deletion when you no longer want one.
 
-![A private Kokoro-generated episode created by the Spotify MCP bundle and finished in Spotify](docs/assets/private-podcast-show.png)
+<p align="center">
+  <img src="docs/assets/private-podcast-show.png" width="680" alt="A private Kokoro-generated episode created by the Spotify MCP bundle and finished in Spotify">
+</p>
 
 <sub>A real bundle result: locally generated speech, private Spotify hosting, cover art, episode
 description, and completed Spotify processing.</sub>
@@ -161,7 +165,9 @@ then choose the exact episode to delete; deletion requires confirmation and a ve
 Approve the Spotify page or pages that open, then start a new Codex task. Codex starts the local
 server when you use it, so you can close the setup terminal.
 
-![Spotify plugin page in Codex with example prompts and local MCP server](docs/assets/codex-plugin-page.png)
+<p align="center">
+  <img src="docs/assets/codex-plugin-page.png" width="680" alt="Spotify plugin page in Codex with example prompts and local MCP server">
+</p>
 
 ## 🛡️ Safety by default
 

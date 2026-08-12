@@ -32,9 +32,16 @@ episodes only; it does not delete shows or mutate Spotify MCP playlists.
 
 ## Delete safely
 
-1. Treat episode deletion as irreversible. Ask for explicit confirmation that includes the exact
-   title and `spotify:episode:...` URI unless the user's current message already names that exact URI
-   and explicitly commands its deletion.
+1. Treat episode deletion as irreversible. Unless the user's current message already names the
+   exact URI and explicitly commands its deletion, prefer the client's structured-choice UI. Put
+   the exact title, `spotify:episode:...` URI, show, and current status in the confirmation question,
+   then offer exactly two choices:
+   - **Delete episode - irreversible**: this selection is the explicit delete confirmation and is
+     bound to the exact displayed URI.
+   - **Cancel**: make no changes.
+   Do not ask for another confirmation after the user selects the delete choice. If structured
+   choices are unavailable, ask the user to reply with
+   `delete <exact-episode-uri>` as the portable fallback.
 2. Delete once with
    `save-to-spotify --json episodes delete <exact-episode-uri>`.
 3. Success from the write must report `status: deleted` and the same exact episode ID. Preserve the

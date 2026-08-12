@@ -12,6 +12,8 @@
   without adding the episode, retrying privacy, or creating duplicate playlists.
 - Added `manage-private-spotify-podcasts` for exact, confirmed, and readback-verified deletion of
   unwanted private Save to Spotify episodes without incidental playlist mutations.
+- Made private-episode deletion prefer a two-choice Delete/Cancel confirmation bound to the exact
+  displayed URI, with the typed exact-URI command retained as a portable fallback.
 - Made Spotify-side episode processing explicit before and after upload, with periodic status
   updates and truthful delayed-processing results instead of false plugin failures or early writes.
 - Added one routed catalog tool for exact tracks, artists, and artist releases.

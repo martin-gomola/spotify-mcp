@@ -32,8 +32,14 @@ def test_management_skill_confirms_irreversible_delete() -> None:
     text = _skill_text()
 
     assert "Treat episode deletion as irreversible" in text
-    assert "Ask for explicit confirmation" in text
-    assert "names that exact URI" in text
+    assert "prefer the client's structured-choice UI" in text
+    assert "exact title, `spotify:episode:...` URI, show, and current status" in text
+    assert "**Delete episode - irreversible**" in text
+    assert "**Cancel**" in text
+    assert "bound to the exact displayed URI" in text
+    assert "Do not ask for another confirmation" in text
+    assert "`delete <exact-episode-uri>`" in text
+    assert "names the" in text and "exact URI" in text
     assert "explicitly commands its deletion" in text
     assert "`save-to-spotify --json episodes delete <exact-episode-uri>`" in text
 
