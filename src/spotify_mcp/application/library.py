@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Mapping, Sequence
+import re
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,10 @@ MAX_PAGE_SIZE = 50
 MAX_LIBRARY_ITEMS_PER_WRITE = 40
 MAX_SAMPLE_SIZE = 100
 SAMPLE_SEGMENTS = 8
+LibraryEntityType = Literal["track", "album", "show", "episode", "audiobook"]
+LibraryMutation = Literal["save", "remove"]
+SUPPORTED_LIBRARY_TYPES = frozenset({"track", "album", "show", "episode", "audiobook"})
+SPOTIFY_ENTITY_ID = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class Track(BaseModel):
@@ -57,14 +62,14 @@ class SavedTracksSample(BaseModel):
     warnings: list[str]
 
 
-class LibraryContainsResult(BaseModel):
-    track_ids: list[str]
+class LibraryItemsContainsResult(BaseModel):
+    uris: list[str]
     saved: list[bool]
 
 
-class LibraryMutationResult(BaseModel):
-    operation: Literal["save", "remove"]
-    track_ids: list[str]
+class LibraryItemsMutationResult(BaseModel):
+    operation: LibraryMutation
+    uris: list[str]
     status: Literal["verified", "mismatch", "ambiguous"]
     observed_saved: list[bool] | None = None
     mismatches: list[str]
@@ -137,21 +142,87 @@ def _saved_tracks(raw_items: Any, *, offset: int) -> tuple[list[SavedTrack], lis
     return tracks, warnings
 
 
-def _normalise_ids(track_ids: Iterable[str]) -> list[str]:
-    ids: list[str] = []
+def _library_uris(values: Sequence[str]) -> list[str]:
+    uris: list[str] = []
     seen: set[str] = set()
-    for value in track_ids:
+    for value in values:
         candidate = value.strip()
-        if candidate.startswith("spotify:track:"):
-            candidate = candidate.removeprefix("spotify:track:")
-        if candidate and candidate not in seen:
-            ids.append(candidate)
+        parts = candidate.split(":")
+        if (
+            len(parts) != 3
+            or parts[0] != "spotify"
+            or SPOTIFY_ENTITY_ID.fullmatch(parts[2]) is None
+        ):
+            raise ValueError("library items must use a full Spotify URI")
+        if parts[1] not in SUPPORTED_LIBRARY_TYPES:
+            raise ValueError(f"unsupported library URI type: {parts[1]}")
+        if candidate not in seen:
+            uris.append(candidate)
             seen.add(candidate)
-    return ids
+    if not uris:
+        raise ValueError("at least one Spotify URI is required")
+    if len(uris) > MAX_LIBRARY_ITEMS_PER_WRITE:
+        raise ValueError(f"at most {MAX_LIBRARY_ITEMS_PER_WRITE} Spotify URIs are allowed")
+    return uris
 
 
-def _track_uris(track_ids: Sequence[str]) -> str:
-    return ",".join(f"spotify:track:{track_id}" for track_id in track_ids)
+async def check_library_items(
+    spotify: SpotifyGateway, uris: Sequence[str]
+) -> LibraryItemsContainsResult:
+    exact_uris = _library_uris(uris)
+    response = await spotify.request(
+        "GET", "/me/library/contains", params={"uris": ",".join(exact_uris)}
+    )
+    if (
+        not isinstance(response, list)
+        or len(response) != len(exact_uris)
+        or any(not isinstance(value, bool) for value in response)
+    ):
+        raise SpotifyRequestError("Spotify returned malformed library membership evidence")
+    return LibraryItemsContainsResult(uris=exact_uris, saved=list(response))
+
+
+async def mutate_library_items(
+    spotify: SpotifyGateway, operation: LibraryMutation, uris: Sequence[str]
+) -> LibraryItemsMutationResult:
+    exact_uris = _library_uris(uris)
+    save = operation == "save"
+    try:
+        await spotify.request(
+            "PUT" if save else "DELETE",
+            "/me/library",
+            params={"uris": ",".join(exact_uris)},
+        )
+    except AmbiguousWrite as exc:
+        return LibraryItemsMutationResult(
+            operation=operation,
+            uris=exact_uris,
+            status="ambiguous",
+            mismatches=[],
+            warning=str(exc),
+        )
+    try:
+        observed = await check_library_items(spotify, exact_uris)
+    except Exception as exc:
+        return LibraryItemsMutationResult(
+            operation=operation,
+            uris=exact_uris,
+            status="ambiguous",
+            mismatches=[],
+            warning=f"Spotify accepted the write, but verification failed: {exc}",
+        )
+    mismatches = [
+        f"{uri}: expected saved={save}, observed saved={actual}"
+        for uri, actual in zip(exact_uris, observed.saved, strict=True)
+        if actual is not save
+    ]
+    return LibraryItemsMutationResult(
+        operation=operation,
+        uris=exact_uris,
+        status="mismatch" if mismatches else "verified",
+        observed_saved=observed.saved,
+        mismatches=mismatches,
+    )
 
 
 def stratified_sample_ranges(
@@ -256,80 +327,3 @@ async def sample_saved_tracks(
         tracks=tracks,
         warnings=warnings,
     )
-
-
-async def check_saved_tracks(
-    spotify: SpotifyGateway, track_ids: Sequence[str]
-) -> LibraryContainsResult:
-    ids = _normalise_ids(track_ids)
-    if not ids:
-        raise ValueError("at least one track ID is required")
-    if len(ids) > MAX_LIBRARY_ITEMS_PER_WRITE:
-        raise ValueError(f"at most {MAX_LIBRARY_ITEMS_PER_WRITE} track IDs are allowed")
-    response = await spotify.request(
-        "GET", "/me/library/contains", params={"uris": _track_uris(ids)}
-    )
-    if (
-        not isinstance(response, list)
-        or len(response) != len(ids)
-        or any(not isinstance(value, bool) for value in response)
-    ):
-        raise SpotifyRequestError("Spotify returned malformed library membership evidence")
-    saved = list(response)
-    return LibraryContainsResult(track_ids=ids, saved=saved)
-
-
-async def _mutate_saved_tracks(
-    spotify: SpotifyGateway, track_ids: Sequence[str], *, save: bool
-) -> LibraryMutationResult:
-    ids = _normalise_ids(track_ids)
-    if not ids:
-        raise ValueError("at least one track ID is required")
-    if len(ids) > MAX_LIBRARY_ITEMS_PER_WRITE:
-        raise ValueError(f"at most {MAX_LIBRARY_ITEMS_PER_WRITE} track IDs are allowed")
-    try:
-        await spotify.request(
-            "PUT" if save else "DELETE",
-            "/me/library",
-            params={"uris": _track_uris(ids)},
-        )
-    except AmbiguousWrite as exc:
-        return LibraryMutationResult(
-            operation="save" if save else "remove",
-            track_ids=ids,
-            status="ambiguous",
-            mismatches=[],
-            warning=str(exc),
-        )
-    try:
-        observed = await check_saved_tracks(spotify, ids)
-    except Exception as exc:  # The write may already have succeeded; never invite a blind retry.
-        return LibraryMutationResult(
-            operation="save" if save else "remove",
-            track_ids=ids,
-            status="ambiguous",
-            mismatches=[],
-            warning=f"Spotify accepted the write, but verification failed: {exc}",
-        )
-    mismatches = [
-        f"{track_id}: expected saved={save}, observed saved={actual}"
-        for track_id, actual in zip(ids, observed.saved, strict=True)
-        if actual is not save
-    ]
-    return LibraryMutationResult(
-        operation="save" if save else "remove",
-        track_ids=ids,
-        status="mismatch" if mismatches else "verified",
-        observed_saved=observed.saved,
-        mismatches=mismatches,
-    )
-
-
-async def save_tracks(spotify: SpotifyGateway, track_ids: Sequence[str]) -> LibraryMutationResult:
-    return await _mutate_saved_tracks(spotify, track_ids, save=True)
-
-
-async def remove_saved_tracks(
-    spotify: SpotifyGateway, track_ids: Sequence[str]
-) -> LibraryMutationResult:
-    return await _mutate_saved_tracks(spotify, track_ids, save=False)

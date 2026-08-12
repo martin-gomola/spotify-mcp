@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from spotify_mcp.application.ports import SpotifyGateway
-from spotify_mcp.domain.errors import AmbiguousWrite, SpotifyRequestError
+from spotify_mcp.domain.errors import SpotifyRequestError
 from spotify_mcp.domain.links import spotify_web_url
 
 MAX_ALBUM_LOOKUPS = 20
-MAX_LIBRARY_URIS = 40
 MAX_PAGE_SIZE = 50
 LOOKUP_CONCURRENCY = 5
 
@@ -66,20 +65,6 @@ class SavedAlbumsPage(BaseModel):
     albums: list[SavedAlbum]
 
 
-class AlbumLibraryContainsResult(BaseModel):
-    album_ids: list[str]
-    saved: list[bool]
-
-
-class AlbumLibraryMutationResult(BaseModel):
-    operation: Literal["save", "remove"]
-    album_ids: list[str]
-    status: Literal["verified", "mismatch", "ambiguous"]
-    observed_saved: list[bool] | None = None
-    mismatches: list[str]
-    warning: str | None = None
-
-
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -116,10 +101,6 @@ def _validated_ids(values: Iterable[str], *, maximum: int) -> list[str]:
     if len(ids) > maximum:
         raise ValueError(f"at most {maximum} album IDs are allowed")
     return ids
-
-
-def _album_uri_list(album_ids: Sequence[str]) -> str:
-    return ",".join(f"spotify:album:{album_id}" for album_id in album_ids)
 
 
 def _album(value: Any) -> Album | None:
@@ -250,74 +231,3 @@ async def get_saved_albums(
         offset=offset,
         albums=albums,
     )
-
-
-async def check_saved_albums(
-    spotify: SpotifyGateway, album_ids: Sequence[str]
-) -> AlbumLibraryContainsResult:
-    ids = _validated_ids(album_ids, maximum=MAX_LIBRARY_URIS)
-    response = await spotify.request(
-        "GET", "/me/library/contains", params={"uris": _album_uri_list(ids)}
-    )
-    if (
-        not isinstance(response, list)
-        or len(response) != len(ids)
-        or any(not isinstance(value, bool) for value in response)
-    ):
-        raise SpotifyRequestError("Spotify returned malformed album membership evidence")
-    saved = list(response)
-    return AlbumLibraryContainsResult(album_ids=ids, saved=saved)
-
-
-async def _mutate_saved_albums(
-    spotify: SpotifyGateway, album_ids: Sequence[str], *, save: bool
-) -> AlbumLibraryMutationResult:
-    ids = _validated_ids(album_ids, maximum=MAX_LIBRARY_URIS)
-    try:
-        await spotify.request(
-            "PUT" if save else "DELETE",
-            "/me/library",
-            params={"uris": _album_uri_list(ids)},
-        )
-    except AmbiguousWrite as exc:
-        return AlbumLibraryMutationResult(
-            operation="save" if save else "remove",
-            album_ids=ids,
-            status="ambiguous",
-            mismatches=[],
-            warning=str(exc),
-        )
-    try:
-        observed = await check_saved_albums(spotify, ids)
-    except Exception as exc:  # The write may have succeeded; never retry it blindly.
-        return AlbumLibraryMutationResult(
-            operation="save" if save else "remove",
-            album_ids=ids,
-            status="ambiguous",
-            mismatches=[],
-            warning=f"Spotify accepted the write, but verification failed: {exc}",
-        )
-    mismatches = [
-        f"{album_id}: expected saved={save}, observed saved={actual}"
-        for album_id, actual in zip(ids, observed.saved, strict=True)
-        if actual is not save
-    ]
-    return AlbumLibraryMutationResult(
-        operation="save" if save else "remove",
-        album_ids=ids,
-        status="mismatch" if mismatches else "verified",
-        observed_saved=observed.saved,
-        mismatches=mismatches,
-    )
-
-
-async def save_albums(
-    spotify: SpotifyGateway, album_ids: Sequence[str]
-) -> AlbumLibraryMutationResult:
-    return await _mutate_saved_albums(spotify, album_ids, save=True)
-
-
-async def remove_saved_albums(
-    spotify: SpotifyGateway, album_ids: Sequence[str]
-) -> AlbumLibraryMutationResult:
-    return await _mutate_saved_albums(spotify, album_ids, save=False)

@@ -1,0 +1,13 @@
+skill: manage-private-spotify-podcasts
+should_trigger:
+  - "Delete the private Spotify episode I just created"
+  - "Show my Save to Spotify episodes and let me remove an old one"
+  - "Remove spotify:episode:0nvFLZjGfcYamD5Zo0URRP from my private show"
+  - "Clean up the stuck compatibility-test episode"
+should_not_trigger:
+  - "Turn this PDF into a private Spotify episode"
+  - "Unfollow the podcast Science Weekly"
+  - "Remove this episode from my saved Spotify library"
+  - "Delete this track from my road-trip playlist"
+  - "Delete my whole Save to Spotify show"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

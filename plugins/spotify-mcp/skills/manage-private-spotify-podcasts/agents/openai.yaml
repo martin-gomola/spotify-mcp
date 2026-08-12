@@ -1,0 +1,15 @@
+interface:
+  display_name: "Manage private Spotify podcasts"
+  short_description: "List or safely delete private episodes"
+  default_prompt: "Use $manage-private-spotify-podcasts to list my private episodes and safely delete the one I choose."
+skill: manage-private-spotify-podcasts
+should_trigger:
+  - "Delete the private Spotify episode I just created"
+  - "List my Save to Spotify episodes so I can remove one"
+  - "Clean up the unwanted test episode in my private Spotify show"
+should_not_trigger:
+  - "Unfollow this public podcast"
+  - "Remove an episode from my saved Spotify library"
+  - "Remove a track from my playlist"
+  - "Delete my entire private podcast show"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

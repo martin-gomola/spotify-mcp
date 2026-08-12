@@ -1,0 +1,43 @@
+skill: manage-private-spotify-podcasts
+cases:
+  - name: missing_companion
+    prompt: "Delete my private generated episode, but save-to-spotify is not installed."
+    expectations:
+      - "Stops and directs the user to make codex-install-bundle and a new Codex task."
+      - "Does not attempt a Spotify MCP library or playlist deletion instead."
+  - name: resolve_by_title
+    prompt: "Delete my Spotify MCP compatibility test episode."
+    expectations:
+      - "Lists private shows and the relevant show's complete episode collection through Save to Spotify."
+      - "Presents the title, exact spotify:episode URI, show, and status before deletion."
+      - "Does not guess when zero or multiple episodes match."
+  - name: explicit_confirmation
+    prompt: "I found one matching private episode. Remove it."
+    expectations:
+      - "Prefers a structured confirmation containing the exact title, URI, show, and current status."
+      - "Offers exactly Delete episode - irreversible and Cancel, with the delete choice bound to the displayed URI."
+      - "Uses delete <exact-episode-uri> as the fallback only when structured choices are unavailable."
+      - "Does not ask for a second confirmation after the user clicks the delete choice."
+      - "Deletes once with save-to-spotify --json episodes delete using the exact URI after confirmation."
+  - name: exact_uri_explicit_delete
+    prompt: "Delete spotify:episode:0nvFLZjGfcYamD5Zo0URRP now."
+    expectations:
+      - "Treats the exact URI and explicit delete command as sufficient confirmation."
+      - "Preserves the exact URI and does not search for or substitute a catalog episode."
+  - name: ambiguous_delete
+    prompt: "The episode delete timed out and returned no result."
+    expectations:
+      - "Re-lists the complete episode collection in the exact show before deciding whether deletion occurred."
+      - "Does not retry the delete blindly."
+  - name: stuck_processing_episode
+    prompt: "This generated episode has been stuck in PROCESSING. Delete it."
+    expectations:
+      - "Allows deletion without waiting for READY and includes the current processing state in the confirmation."
+      - "Uses the same exact-target, one-write, and absence-verification workflow."
+  - name: verified_delete
+    prompt: "The delete returned status deleted. Finish the cleanup."
+    expectations:
+      - "Re-lists every episode in the show and verifies that the exact URI is absent."
+      - "Does not claim completion from the write response alone."
+      - "Reports playlist cleanup separately without mutating a playlist unless explicitly requested."
+threshold: { pass_rate: 1.0 }

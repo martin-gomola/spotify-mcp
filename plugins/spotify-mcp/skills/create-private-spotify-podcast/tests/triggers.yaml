@@ -1,0 +1,11 @@
+skill: create-private-spotify-podcast
+should_trigger:
+  - "Turn this PDF into a private podcast I can listen to on Spotify"
+  - "Make a Spotify audio episode from my meeting notes"
+  - "Convert this interview transcript into a private Spotify podcast"
+should_not_trigger:
+  - "Summarize this PDF as text"
+  - "Save this existing MP3 to Spotify"
+  - "Add podcast episodes to my commute playlist"
+  - "Reconnect Spotify MCP"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

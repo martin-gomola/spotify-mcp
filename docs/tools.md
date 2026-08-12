@@ -1,6 +1,6 @@
 # Tool catalog
 
-Spotify MCP exposes 57 model-visible structured tools. Asterisks in the input column mark required
+Spotify MCP exposes 55 model-visible structured tools. Asterisks in the input column mark required
 fields; all other inputs are optional and use the defaults shown below.
 
 ## Status and discovery
@@ -9,6 +9,7 @@ fields; all other inputs are optional and use the defaults shown below.
 | --- | --- | --- | --- |
 | `spotify_status` | None | Spotify read when configured | Return actionable configuration details before setup. When configured, validate the saved authentication and return `authenticated=false` when the local grant is missing or expired. |
 | `spotify_search` | `query*`, `item_type*`, `limit=10`, `offset=0` | Spotify read | Search one type: `track`, `album`, `artist`, `playlist`, `episode`, or `show`. Limit is 1–10. |
+| `spotify_catalog` | `route*`, `entity_id*`, route-specific pagination | Spotify read | Route one exact read to track metadata, artist metadata, or an artist's paginated albums and singles. |
 | `spotify_recently_played` | `limit=20` | Spotify read | Return up to 50 recently played tracks. |
 | `spotify_top_tracks` | `time_range=medium_term`, `limit=20` | Spotify read | Return up to 50 top tracks for `short_term`, `medium_term`, or `long_term`. |
 | `spotify_top_artists` | `time_range=medium_term`, `limit=20` | Spotify read | Return up to 50 top artists for a Spotify time range. Missing genre data remains `null`, not an inferred empty list. |
@@ -78,9 +79,9 @@ verification.
 | --- | --- | --- | --- |
 | `spotify_saved_tracks` | `limit=50`, `offset=0` | Spotify read | Return one page of Liked Songs with saved date and stable library position. Limit is 1–50. |
 | `spotify_sample_liked_songs` | `sample_size=48` | Spotify read | Return a deterministic, stratified sample spanning the complete saved-history range. Size is 8–100. |
-| `spotify_library_contains` | `track_ids*` | Spotify read | Check up to 40 exact track IDs. Spotify track URI prefixes are accepted. |
-| `spotify_library_save` | `track_ids*` | Spotify write + read verification | Save up to 40 exact tracks and verify their observed state once. |
-| `spotify_library_remove` | `track_ids*` | Destructive Spotify write + read verification | Remove up to 40 exact tracks and verify their observed state once. There is no automatic undo. |
+| `spotify_library_contains` | `uris*` | Spotify read | Check up to 40 exact track, album, show, episode, or audiobook URIs. |
+| `spotify_library_save` | `uris*` | Spotify write + read verification | Save up to 40 exact supported library URIs and verify their observed state once. |
+| `spotify_library_remove` | `uris*` | Destructive Spotify write + read verification | Remove up to 40 exact supported library URIs and verify their observed state once. There is no automatic undo. |
 
 `spotify_sample_liked_songs` is intended for taste-based playlist work. It samples across the
 history; it is not a complete library audit. Page through `spotify_saved_tracks` for a complete
@@ -93,13 +94,12 @@ scan.
 | `spotify_albums` | `album_ids*` | Spotify read | Fetch typed metadata for up to 20 exact albums. Unknown IDs are returned separately. |
 | `spotify_album_tracks` | `album_id*`, `limit=20`, `offset=0` | Spotify read | Return one page of tracks from an exact album. Limit is 1–50. |
 | `spotify_saved_albums` | `limit=20`, `offset=0` | Spotify read | Return one page of albums saved in the current user's library. Limit is 1–50. |
-| `spotify_album_library_contains` | `album_ids*` | Spotify read | Check whether up to 40 exact albums are saved. |
-| `spotify_album_library_save` | `album_ids*` | Spotify write + read verification | Save up to 40 exact albums through Spotify's shared library endpoint and verify once. |
-| `spotify_album_library_remove` | `album_ids*` | Destructive Spotify write + read verification | Remove up to 40 exact saved albums and verify once. |
-
 Album tools accept bare album IDs or `spotify:album:...` URIs. `spotify_albums` uses supported
 singular album requests with bounded concurrency rather than Spotify's retired batch-albums
 endpoint.
+
+Use the generic library tools above for album save, remove, and membership operations. They require
+full Spotify URIs so mixed entity types remain explicit and exact.
 
 ## Playlists
 

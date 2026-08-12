@@ -124,6 +124,39 @@ def check_plugin(errors: list[str]) -> None:
 
 
 def check_docs(errors: list[str]) -> None:
+    nested_readmes = [
+        path
+        for source_root in (ROOT / "docs", ROOT / "plugins", ROOT / "src", ROOT / "tests")
+        for path in source_root.rglob("README.md")
+    ]
+    if nested_readmes:
+        rendered = ", ".join(str(path.relative_to(ROOT)) for path in sorted(nested_readmes))
+        errors.append(f"Documentation must use only the root README.md; remove: {rendered}")
+
+    root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for marker in (
+        "Your documents, private on Spotify",
+        "make codex-install-bundle",
+        "docs/assets/private-podcast-show.png",
+    ):
+        if marker not in root_readme:
+            errors.append(f"README.md: private-podcast showcase is missing `{marker}`")
+
+    installation_layout = (ROOT / "docs" / "installation-layout.md").read_text(encoding="utf-8")
+    for marker in (
+        "Installation layout",
+        "~/Library/Application Support/spotify-mcp/",
+        "~/.codex/plugins/cache/spotify-mcp/",
+        "~/.local/bin/save-to-spotify",
+        "~/.local/share/save-to-spotify/skills/save-to-spotify/",
+        "~/.config/save-to-spotify/",
+        "~/Library/Caches/save-to-spotify/",
+    ):
+        if marker not in installation_layout:
+            errors.append(
+                f"docs/installation-layout.md: installation boundary is missing `{marker}`"
+            )
+
     markdown_paths = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]
     markdown_paths.extend(PLUGIN.rglob("*.md"))
     for path in markdown_paths:
@@ -228,6 +261,17 @@ def check_local_startup(errors: list[str]) -> None:
                 errors.append(f"Makefile: codex-install must support `{expected}`")
     if not re.search(r"^codex-update: setup$", makefile, re.M):
         errors.append("Makefile: codex-update must refresh Spotify scope requirements")
+    for target in ("codex-install-bundle", "codex-update-bundle"):
+        if not re.search(rf"^{target}:", makefile, re.M):
+            errors.append(f"Makefile: missing optional companion target `{target}`")
+    for marker in (
+        "SAVE_TO_SPOTIFY_VERSION ?= 0.2.0",
+        '--version "$(SAVE_TO_SPOTIFY_VERSION)"',
+        '"$$sts_bin" setup',
+        '"$$sts_bin" --json doctor',
+    ):
+        if marker not in makefile:
+            errors.append(f"Makefile: Save to Spotify bundle is missing `{marker}`")
 
 
 def main() -> int:
@@ -241,7 +285,10 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print(f"Release contracts OK: {len(tool_names())} tools, 3 skills, current endpoints")
+    skill_count = sum(path.is_dir() for path in (PLUGIN / "skills").iterdir())
+    print(
+        f"Release contracts OK: {len(tool_names())} tools, {skill_count} skills, current endpoints"
+    )
     print("Known fallback: Spotify /audio-features is deprecated and may use ReccoBeats.")
     return 0
 

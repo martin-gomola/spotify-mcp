@@ -1,0 +1,19 @@
+skill: use-spotify
+cases:
+  - name: latest_artist_release
+    prompt: "Find the latest release by Florence and the Machine."
+    expectations:
+      - "Reads only routes/catalog-library.md."
+      - "Uses spotify_search to resolve the artist, pages all spotify_catalog artist_albums results, and compares release dates and variants."
+      - "Does not inventory the full tool catalog."
+  - name: pause_playback
+    prompt: "Pause Spotify."
+    expectations:
+      - "Reads only routes/playback.md."
+      - "Calls spotify_pause without loading unrelated catalog, library, playlist, or DJ tools."
+  - name: save_show
+    prompt: "Save this Spotify show URI."
+    expectations:
+      - "Reads only routes/catalog-library.md or routes/podcasts.md."
+      - "Calls spotify_library_save with the exact show URI and reports verified state."
+threshold: { pass_rate: 1.0 }
