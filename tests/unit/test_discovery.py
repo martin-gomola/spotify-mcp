@@ -42,7 +42,12 @@ async def test_search_uses_current_endpoint_and_caps_results() -> None:
                             "uri": "spotify:track:track-1",
                             "name": "Road Song",
                             "artists": [{"name": "Driver"}],
-                            "album": {"name": "Open Road"},
+                            "album": {
+                                "name": "Open Road",
+                                "images": [{"url": "https://i.scdn.co/image/album-1"}],
+                            },
+                            "duration_ms": 245000,
+                            "explicit": False,
                         }
                     ],
                 }
@@ -54,7 +59,9 @@ async def test_search_uses_current_endpoint_and_caps_results() -> None:
 
     assert result.items[0].artists == ["Driver"]
     assert result.items[0].spotify_url == "https://open.spotify.com/track/track-1"
-    assert result.items[0].duration_ms is None
+    assert result.items[0].image_url == "https://i.scdn.co/image/album-1"
+    assert result.items[0].duration_ms == 245000
+    assert result.items[0].explicit is False
     assert spotify.calls == [
         (
             "GET",
@@ -126,6 +133,87 @@ async def test_search_links_podcast_entities_and_rejects_invalid_external_urls()
 
     assert show.items[0].spotify_url == "https://open.spotify.com/show/show-1"
     assert episode.items[0].spotify_url == "https://open.spotify.com/episode/episode-1"
+
+
+@pytest.mark.anyio
+async def test_search_preserves_collection_metadata_and_artwork() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "playlists": {
+                    "items": [
+                        {
+                            "id": "playlist-1",
+                            "name": "Morning Run",
+                            "owner": {"display_name": "Runner"},
+                            "description": "Warm-up through cool-down",
+                            "tracks": {"total": 23},
+                            "images": [{"url": "https://mosaic.scdn.co/640/playlist-1"}],
+                        }
+                    ]
+                }
+            },
+            {
+                "albums": {
+                    "items": [
+                        {
+                            "id": "album-1",
+                            "name": "Morning Run Album",
+                            "total_tracks": 12,
+                            "release_date": "2026-08-12",
+                            "images": [{"url": "https://i.scdn.co/image/album-1"}],
+                        }
+                    ]
+                }
+            },
+        ]
+    )
+
+    result = await DiscoveryService(spotify).search("morning", "playlist")
+    album_result = await DiscoveryService(spotify).search("morning", "album")
+
+    assert result.items[0].owner == "Runner"
+    assert result.items[0].description == "Warm-up through cool-down"
+    assert result.items[0].item_count == 23
+    assert result.items[0].image_url == "https://mosaic.scdn.co/640/playlist-1"
+    assert album_result.items[0].item_count == 12
+    assert album_result.items[0].release_date == "2026-08-12"
+    assert album_result.items[0].image_url == "https://i.scdn.co/image/album-1"
+
+
+@pytest.mark.anyio
+async def test_top_entities_preserve_spotify_artwork() -> None:
+    spotify = FakeSpotify(
+        [
+            {
+                "items": [
+                    {
+                        "id": "track-1",
+                        "name": "Track",
+                        "album": {
+                            "images": [{"url": "https://image-cdn-fa.spotifycdn.com/image/track-1"}]
+                        },
+                    }
+                ]
+            },
+            {
+                "items": [
+                    {
+                        "id": "artist-1",
+                        "name": "Artist",
+                        "images": [{"url": "https://mosaic.scdn.co/640/artist-1"}],
+                    }
+                ]
+            },
+        ]
+    )
+    service = DiscoveryService(spotify)
+
+    tracks = await service.top_tracks()
+    artists = await service.top_artists()
+
+    assert tracks.tracks[0].image_url == ("https://image-cdn-fa.spotifycdn.com/image/track-1")
+    assert artists.artists[0].image_url == "https://mosaic.scdn.co/640/artist-1"
 
 
 @pytest.mark.anyio

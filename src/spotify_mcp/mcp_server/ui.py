@@ -58,9 +58,18 @@ class SpotifyResultCard(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     spotify_url: str
+    image_url: str | None = None
     subtitle: str | None = Field(default=None, max_length=300)
     kind: Literal["track", "album", "artist", "playlist", "episode", "show"]
     reason: str | None = Field(default=None, max_length=500)
+    artists: list[str] = Field(default_factory=list, max_length=20)
+    album: str | None = Field(default=None, max_length=200)
+    owner: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    duration_ms: int | None = Field(default=None, ge=0)
+    explicit: bool | None = None
+    item_count: int | None = Field(default=None, ge=0)
+    release_date: str | None = Field(default=None, max_length=40)
 
     @model_validator(mode="before")
     @classmethod
@@ -139,7 +148,11 @@ def create_results_apps() -> Apps:
         description="Compact clickable Spotify result cards.",
         csp=ResourceCsp(
             connect_domains=[],
-            resource_domains=[],
+            resource_domains=[
+                "https://i.scdn.co",
+                "https://image-cdn-fa.spotifycdn.com",
+                "https://mosaic.scdn.co",
+            ],
             frame_domains=[],
             base_uri_domains=[],
         ),

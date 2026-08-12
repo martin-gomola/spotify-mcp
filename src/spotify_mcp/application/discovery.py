@@ -25,6 +25,7 @@ class Track(Model):
     name: str
     uri: str | None = None
     spotify_url: str | None = None
+    image_url: str | None = None
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
     duration_ms: int | None = None
@@ -37,6 +38,7 @@ class Artist(Model):
     name: str
     uri: str | None = None
     spotify_url: str | None = None
+    image_url: str | None = None
     genres: list[str] | None = None
     popularity: int | None = None
 
@@ -47,12 +49,14 @@ class SearchItem(Model):
     name: str
     uri: str | None = None
     spotify_url: str | None = None
+    image_url: str | None = None
     artists: list[str] = Field(default_factory=list)
     album: str | None = None
     owner: str | None = None
     description: str | None = None
     publisher: str | None = None
     duration_ms: int | None = None
+    explicit: bool | None = None
     release_date: str | None = None
     total_episodes: int | None = None
     item_count: int | None = None
@@ -124,6 +128,16 @@ def _spotify_url(item: Mapping[str, Any], item_type: SpotifyEntityType, item_id:
     return spotify_web_url(item_type, item_id, external_url=external_url)
 
 
+def _image_url(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return None
+    for image_value in value:
+        candidate = _string(_mapping(image_value).get("url"))
+        if candidate is not None:
+            return candidate
+    return None
+
+
 def _track(value: Any) -> Track | None:
     item = _mapping(value)
     track_id = _string(item.get("id"))
@@ -135,6 +149,7 @@ def _track(value: Any) -> Track | None:
         name=name,
         uri=_string(item.get("uri")),
         spotify_url=_spotify_url(item, "track", track_id),
+        image_url=_image_url(_mapping(item.get("album")).get("images")),
         artists=_artist_names(item.get("artists")),
         album=_string(_mapping(item.get("album")).get("name")),
         duration_ms=_integer(item.get("duration_ms")),
@@ -154,6 +169,7 @@ def _artist(value: Any) -> Artist | None:
         name=name,
         uri=_string(item.get("uri")),
         spotify_url=_spotify_url(item, "artist", artist_id),
+        image_url=_image_url(item.get("images")),
         genres=_string_list(item.get("genres")),
         popularity=_integer(item.get("popularity")),
     )
@@ -258,7 +274,11 @@ class DiscoveryService:
         if item_id is None or name is None:
             return None
 
-        item_count = _integer(_mapping(item.get("items")).get("total"))
+        item_count = _integer(item.get("total_tracks"))
+        if item_count is None:
+            item_count = _integer(item.get("total_episodes"))
+        if item_count is None:
+            item_count = _integer(_mapping(item.get("items")).get("total"))
         if item_count is None:
             item_count = _integer(_mapping(item.get("tracks")).get("total"))
         return SearchItem(
@@ -267,12 +287,18 @@ class DiscoveryService:
             name=name,
             uri=_string(item.get("uri")),
             spotify_url=_spotify_url(item, item_type, item_id),
+            image_url=_image_url(
+                _mapping(item.get("album")).get("images")
+                if item_type == "track"
+                else item.get("images")
+            ),
             artists=_artist_names(item.get("artists")),
             album=_string(_mapping(item.get("album")).get("name")),
             owner=_string(_mapping(item.get("owner")).get("display_name")),
             description=_string(item.get("description")),
             publisher=_string(item.get("publisher")),
             duration_ms=_integer(item.get("duration_ms")),
+            explicit=_boolean(item.get("explicit")),
             release_date=_string(item.get("release_date")),
             total_episodes=_integer(item.get("total_episodes")),
             item_count=item_count,

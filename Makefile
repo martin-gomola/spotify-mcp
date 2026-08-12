@@ -1,4 +1,4 @@
-.PHONY: setup run auth doctor codex-install codex-update sync format lint typecheck test release-check build check
+.PHONY: setup run auth doctor codex-install codex-update sync format lint typecheck test release-check build check commit
 
 CODEX ?= codex
 CODEX_MARKETPLACE := spotify-mcp
@@ -69,3 +69,6 @@ build:
 	uv build
 
 check: lint typecheck test release-check build
+
+commit:
+	@read -r -p "Commit message: " msg && git commit -am "$$msg"

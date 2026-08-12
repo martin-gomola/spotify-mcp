@@ -51,6 +51,7 @@ def playlist_metadata(**overrides: Any) -> dict[str, Any]:
         "public": False,
         "collaborative": False,
         "snapshot_id": "snapshot-1",
+        "images": [{"url": "https://mosaic.scdn.co/640/playlist-cover"}],
         "external_urls": {"spotify": "https://open.spotify.com/playlist/p1"},
     }
     value.update(overrides)
@@ -69,6 +70,7 @@ async def test_playlist_reads_use_current_item_counts_and_items_endpoint() -> No
                         "name": "Road Trip",
                         "items": {"total": 26},
                         "public": False,
+                        "images": [{"url": "https://i.scdn.co/image/playlist-cover"}],
                         "external_urls": {"spotify": "https://open.spotify.com/playlist/p1"},
                     }
                 ],
@@ -99,8 +101,10 @@ async def test_playlist_reads_use_current_item_counts_and_items_endpoint() -> No
 
     assert playlists.playlists[0].item_count == 26
     assert playlists.playlists[0].spotify_url == "https://open.spotify.com/playlist/p1"
+    assert playlists.playlists[0].image_url == "https://i.scdn.co/image/playlist-cover"
     assert details.item_count == 26
     assert details.spotify_url == "https://open.spotify.com/playlist/p1"
+    assert details.image_url == "https://mosaic.scdn.co/640/playlist-cover"
     assert items.items[0].spotify_url == "https://open.spotify.com/track/t1"
     assert items.items[1].type == "unknown"
     assert spotify.calls[-1] == (
@@ -125,6 +129,7 @@ async def test_create_reports_visibility_mismatch_without_second_write() -> None
     assert result.status == "mismatch"
     assert result.visibility_status == "mismatch"
     assert result.spotify_url == "https://open.spotify.com/playlist/p1"
+    assert result.image_url == "https://mosaic.scdn.co/640/playlist-cover"
     assert result.observed_public is True
     assert [call[0] for call in spotify.calls] == ["POST", "GET"]
 

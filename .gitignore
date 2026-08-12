@@ -20,3 +20,7 @@ credentials.json
 tokens.json
 .spotify-mcp/
 node_modules/
+/.design-qa/
+/design-qa.md
+/ui/spotify-results/preview.html
+/ui/spotify-results/src/preview.ts

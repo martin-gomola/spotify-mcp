@@ -2,7 +2,9 @@
 
 Use Spotify naturally from Codex: search music and podcasts, control playback, rediscover music
 across Liked Songs, build verified playlists, and plan snapshot-safe DJ running orders. Results
-include canonical Spotify links and can appear as compact cards in clients with MCP Apps support.
+include canonical Spotify links and can appear as compact cards inside Codex.
+
+![Codex creating and verifying a Spotify playlist, then presenting it as a playable result card with device selection](../../docs/assets/codex-playlist-result-card.png)
 
 The MCP server runs locally. Spotify OAuth tokens stay outside both the plugin and repository, and
 PKCE does not require a client secret.

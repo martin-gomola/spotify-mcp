@@ -118,9 +118,88 @@ describe("SpotifyResultsView", () => {
     });
 
     expect(document.querySelector(".meta")?.textContent).toBe(
-      "track — Florence + The Machine • Everybody Scream",
+      "Florence + The Machine • Everybody Scream",
     );
     expect(document.querySelector("button.play")?.textContent).toBe("Play");
+  });
+
+  it("renders artwork and natural track metadata without repeating the entity kind", async () => {
+    const bridge = bridgeWith(contextResult());
+    await new SpotifyResultsView(bridge).render({
+      title: "Running picks",
+      items: [
+        {
+          type: "track",
+          name: "Midnight City",
+          spotify_url: "https://open.spotify.com/track/track-1",
+          artists: ["M83"],
+          album: "Hurry Up, We're Dreaming",
+          image_url: "https://i.scdn.co/image/cover-1",
+          duration_ms: 244_000,
+          explicit: true,
+        },
+      ],
+    });
+
+    const image = document.querySelector<HTMLImageElement>("img.artwork");
+    expect(image?.src).toBe("https://i.scdn.co/image/cover-1");
+    expect(image?.alt).toBe("");
+    expect(document.querySelector(".meta")?.textContent).toBe(
+      "M83 • Hurry Up, We're Dreaming · 4:04",
+    );
+    expect(document.querySelector(".explicit-badge")?.getAttribute("aria-label")).toBe("Explicit");
+  });
+
+  it("renders one playlist as a richer collection card with natural summary metadata", async () => {
+    const bridge = bridgeWith(contextResult());
+    await new SpotifyResultsView(bridge).render({
+      title: "Verified sunrise run",
+      items: [
+        {
+          kind: "playlist",
+          name: "Sunrise Run — 90 Minutes",
+          spotify_url: "https://open.spotify.com/playlist/playlist-1",
+          subtitle: "Liked Songs 2014–2026",
+          image_url: "https://mosaic.scdn.co/640/cover",
+          item_count: 23,
+          duration_ms: 5_403_000,
+          description: "Warm groove → house lift → indie crossover → cool-down",
+        },
+      ],
+    });
+
+    const card = document.querySelector(".card");
+    expect(card?.classList.contains("collection-card")).toBe(true);
+    expect(card?.classList.contains("has-artwork")).toBe(true);
+    expect(card?.querySelector(".meta")?.textContent).toBe(
+      "Liked Songs 2014–2026 · 23 tracks · 90 min",
+    );
+    expect(card?.querySelector(".reason")?.textContent).toContain("house lift");
+  });
+
+  it("shows six results initially and reveals the remaining rows on demand", async () => {
+    const bridge = bridgeWith(contextResult());
+    const items = Array.from({ length: 9 }, (_, index) => ({
+      kind: "track" as const,
+      name: `Track ${index + 1}`,
+      spotify_url: `https://open.spotify.com/track/track-${index + 1}`,
+    }));
+    await new SpotifyResultsView(bridge).render({ title: "Nine tracks", items });
+
+    const cards = [...document.querySelectorAll<HTMLElement>(".card")];
+    const disclosure = document.querySelector<HTMLButtonElement>(".show-more")!;
+    expect(cards).toHaveLength(9);
+    expect(cards.filter((card) => !card.hidden)).toHaveLength(6);
+    expect(disclosure.textContent).toBe("Show 3 more");
+
+    disclosure.click();
+    expect(cards.every((card) => !card.hidden)).toBe(true);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(disclosure.textContent).toBe("Show fewer");
+
+    disclosure.click();
+    expect(cards.filter((card) => !card.hidden)).toHaveLength(6);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("renders Play for playable items and keeps episodes link-only", async () => {
@@ -162,6 +241,16 @@ describe("SpotifyResultsView", () => {
     expect(play.disabled).toBe(false);
   });
 
+  it("keeps a selected device changeable when one device is available", async () => {
+    const bridge = bridgeWith(contextResult());
+    await new SpotifyResultsView(bridge).render(TRACKS);
+
+    const select = document.querySelector<HTMLSelectElement>(".device-choice select");
+    expect(select).not.toBeNull();
+    expect(select?.value).toBe("device-1");
+    expect(select?.selectedOptions[0]?.textContent).toBe("Desk (currently active)");
+  });
+
   it("marks a card Playing only after verified observed state", async () => {
     const bridge = bridgeWith(contextResult(), verifiedResult());
     await new SpotifyResultsView(bridge).render(TRACKS);
@@ -176,6 +265,10 @@ describe("SpotifyResultsView", () => {
       spotify_url: TRACKS.items[0]!.spotify_url,
       device_id: "device-1",
     });
+    expect(document.querySelector(".device-choice-label")?.textContent).toBe("Playing on");
+    expect(document.querySelector<HTMLSelectElement>(".device-choice select")?.value).toBe(
+      "device-1",
+    );
   });
 
   it("turns the active card control into Pause and pauses that device", async () => {
@@ -209,7 +302,10 @@ describe("SpotifyResultsView", () => {
     });
     expect(document.querySelector(".card")?.hasAttribute("aria-current")).toBe(false);
     expect(document.querySelector(".card-status")?.textContent).toBe("Paused");
-    expect(document.querySelector("#device")?.textContent).toBe("Paused on Desk");
+    expect(document.querySelector(".device-choice-label")?.textContent).toBe("Paused on");
+    expect(document.querySelector<HTMLSelectElement>(".device-choice select")?.value).toBe(
+      "device-1",
+    );
   });
 
   it("allows only one playback request while a write is in flight", async () => {
@@ -309,7 +405,10 @@ describe("SpotifyResultsView", () => {
 
     expect(document.querySelector("#title")?.textContent).toBe("Newer results");
     expect(document.querySelectorAll(".card")).toHaveLength(1);
-    expect(document.querySelector("#device")?.textContent).toBe("Play on Desk");
+    expect(document.querySelector(".device-choice-label")?.textContent).toBe("Play on");
+    expect(document.querySelector<HTMLSelectElement>(".device-choice select")?.value).toBe(
+      "device-1",
+    );
     expect(document.querySelector("#feedback")?.textContent).toBe("");
   });
 });

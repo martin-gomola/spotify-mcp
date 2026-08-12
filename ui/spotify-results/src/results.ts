@@ -6,6 +6,11 @@ export interface SpotifyResultItem {
   subtitle?: string | null;
   kind: ResultKind;
   reason?: string | null;
+  image_url?: string | null;
+  duration_ms?: number | null;
+  explicit?: boolean | null;
+  item_count?: number | null;
+  description?: string | null;
 }
 
 export interface SpotifyResultsPayload {
@@ -73,6 +78,8 @@ interface CardView {
 }
 
 const PLAYABLE_KINDS = new Set<ResultKind>(["track", "album", "artist", "playlist"]);
+const COLLECTION_KINDS = new Set<ResultKind>(["album", "artist", "playlist", "show"]);
+const INITIAL_VISIBLE_RESULTS = 6;
 const RESULT_KINDS = new Set<ResultKind>([
   "track",
   "album",
@@ -90,6 +97,27 @@ function textList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && Boolean(item))
     : [];
+}
+
+function optionalInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function formatDuration(durationMs: number | null | undefined, compact = false): string | null {
+  if (durationMs === null || durationMs === undefined) return null;
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (compact) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${Math.max(1, Math.round(totalSeconds / 60))} min`;
+}
+
+function itemCountLabel(item: SpotifyResultItem): string | null {
+  if (item.item_count === null || item.item_count === undefined) return null;
+  const noun = item.kind === "show" ? "episode" : "track";
+  return `${item.item_count} ${noun}${item.item_count === 1 ? "" : "s"}`;
 }
 
 function normalizeResultItem(value: unknown): SpotifyResultItem | null {
@@ -137,6 +165,11 @@ function normalizeResultItem(value: unknown): SpotifyResultItem | null {
     subtitle: suppliedSubtitle || derivedSubtitle || null,
     kind: kind as ResultKind,
     reason: typeof value.reason === "string" ? value.reason : null,
+    image_url: typeof value.image_url === "string" ? value.image_url : null,
+    duration_ms: optionalInteger(value.duration_ms),
+    explicit: typeof value.explicit === "boolean" ? value.explicit : null,
+    item_count: optionalInteger(value.item_count),
+    description: typeof value.description === "string" ? value.description : null,
   };
 }
 
@@ -158,6 +191,11 @@ function payloadKey(payload: SpotifyResultsPayload): string {
       item.subtitle ?? null,
       item.kind,
       item.reason ?? null,
+      item.image_url ?? null,
+      item.duration_ms ?? null,
+      item.explicit ?? null,
+      item.item_count ?? null,
+      item.description ?? null,
     ]),
   ]);
 }
@@ -182,6 +220,21 @@ function addText(parent: HTMLElement, className: string, value: string | null | 
   parent.appendChild(element);
 }
 
+function addArtwork(parent: HTMLElement, item: SpotifyResultItem, prominent: boolean): void {
+  if (!item.image_url) return;
+  parent.classList.add("has-artwork");
+  const image = document.createElement("img");
+  image.className = prominent ? "artwork artwork-prominent" : "artwork";
+  image.src = item.image_url;
+  image.alt = "";
+  image.loading = prominent ? "eager" : "lazy";
+  image.addEventListener("error", () => {
+    image.remove();
+    parent.classList.remove("has-artwork");
+  }, { once: true });
+  parent.appendChild(image);
+}
+
 function requireElement(selector: string): HTMLElement {
   const el = document.querySelector<HTMLElement>(selector);
   if (!el) throw new Error(`SpotifyResultsView: required element "${selector}" not found`);
@@ -192,6 +245,7 @@ export class SpotifyResultsView {
   readonly #bridge: ResultsBridge;
   readonly #title: HTMLElement;
   readonly #device: HTMLElement;
+  #deviceLabel: HTMLElement | null = null;
   readonly #summary: HTMLElement;
   readonly #results: HTMLElement;
   readonly #feedback: HTMLElement;
@@ -224,22 +278,49 @@ export class SpotifyResultsView {
     this.#summary.textContent = `${normalizedPayload.items.length} result${normalizedPayload.items.length === 1 ? "" : "s"}`;
     this.#feedback.replaceChildren();
     this.#results.replaceChildren();
-    this.#cards = normalizedPayload.items.map((item) => this.#renderCard(item));
+    const isSingleCollection = normalizedPayload.items.length === 1
+      && COLLECTION_KINDS.has(normalizedPayload.items[0]!.kind);
+    this.#cards = normalizedPayload.items.map((item, index) =>
+      this.#renderCard(item, isSingleCollection, index >= INITIAL_VISIBLE_RESULTS));
+    if (normalizedPayload.items.length > INITIAL_VISIBLE_RESULTS) {
+      this.#addResultsDisclosure(normalizedPayload.items.length);
+    }
     this.#lastRender = this.#loadContext(revision);
     return this.#lastRender;
   }
 
-  #renderCard(item: SpotifyResultItem): CardView {
+  #renderCard(item: SpotifyResultItem, prominent: boolean, initiallyHidden: boolean): CardView {
     const card = document.createElement("article");
-    card.className = "card";
+    card.className = prominent ? "card collection-card" : "card";
+    if (item.kind === "track") card.classList.add("track-card");
+    if (initiallyHidden) {
+      card.classList.add("is-hidden");
+      card.hidden = true;
+    }
     card.dataset.spotifyUrl = item.spotify_url;
+
+    addArtwork(card, item, prominent);
 
     const copy = document.createElement("div");
     copy.className = "copy";
-    addText(copy, "name", item.name);
-    const meta = [item.kind, item.subtitle].filter((value) => value?.trim()).join(" — ");
+    const itemHeading = document.createElement("div");
+    itemHeading.className = "item-heading";
+    addText(itemHeading, "name", item.name);
+    if (item.explicit) {
+      const explicit = document.createElement("span");
+      explicit.className = "explicit-badge";
+      explicit.textContent = "E";
+      explicit.setAttribute("aria-label", "Explicit");
+      itemHeading.appendChild(explicit);
+    }
+    copy.appendChild(itemHeading);
+    const meta = [
+      item.subtitle,
+      itemCountLabel(item),
+      formatDuration(item.duration_ms, item.kind === "track" || item.kind === "episode"),
+    ].filter((value) => value?.trim()).join(" · ");
     addText(copy, "meta", meta);
-    addText(copy, "reason", item.reason);
+    addText(copy, "reason", item.reason || (prominent ? item.description : null));
     const status = document.createElement("p");
     status.className = "card-status";
     status.setAttribute("aria-live", "polite");
@@ -282,6 +363,27 @@ export class SpotifyResultsView {
     return { element: card, item, playButton, status };
   }
 
+  #addResultsDisclosure(total: number): void {
+    const footer = document.createElement("div");
+    footer.className = "results-footer";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "show-more";
+    button.textContent = `Show ${total - INITIAL_VISIBLE_RESULTS} more`;
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", () => {
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      for (const card of this.#cards.slice(INITIAL_VISIBLE_RESULTS)) {
+        card.element.hidden = expanded;
+        card.element.classList.toggle("is-hidden", expanded);
+      }
+      button.setAttribute("aria-expanded", String(!expanded));
+      button.textContent = expanded ? `Show ${total - INITIAL_VISIBLE_RESULTS} more` : "Show fewer";
+    });
+    footer.appendChild(button);
+    this.#results.appendChild(footer);
+  }
+
   async #loadContext(revision: number): Promise<void> {
     this.#device.textContent = "Loading devices...";
     try {
@@ -320,17 +422,24 @@ export class SpotifyResultsView {
 
   #applyContext(context: ResultsContext): void {
     const usable = context.devices.filter((device) => Boolean(device.id) && !device.is_restricted);
-    this.#selectedDeviceId = context.selected_device_id || null;
+    this.#selectedDeviceId = context.selected_device_id
+      || (usable.length === 1 ? usable[0]!.id ?? null : null);
+    this.#deviceLabel = null;
     this.#device.replaceChildren();
     this.#setFeedback("");
 
     if (!context.has_usable_devices || usable.length === 0) {
       this.#device.textContent = "No controllable device";
       this.#setFeedback("Open Spotify on a device to play here.", "error");
-    } else if (context.requires_device_selection) {
+    } else {
       const wrapper = document.createElement("label");
       wrapper.className = "device-choice";
-      wrapper.textContent = "Play on";
+      const label = document.createElement("span");
+      label.className = "device-choice-label";
+      label.textContent = context.now_playing.is_playing && this.#selectedDeviceId
+        ? "Playing on"
+        : "Play on";
+      this.#deviceLabel = label;
       const select = document.createElement("select");
       select.setAttribute("aria-label", "Spotify playback device");
       const placeholder = document.createElement("option");
@@ -343,16 +452,15 @@ export class SpotifyResultsView {
         option.textContent = `${device.name}${device.is_active ? " (currently active)" : ""}`;
         select.appendChild(option);
       }
+      select.value = this.#selectedDeviceId || "";
       select.addEventListener("change", () => {
         this.#selectedDeviceId = select.value || null;
+        label.textContent = "Play on";
         this.#syncPlayButtons();
       });
+      wrapper.appendChild(label);
       wrapper.appendChild(select);
       this.#device.appendChild(wrapper);
-    } else {
-      const selected = usable.find((device) => device.id === this.#selectedDeviceId);
-      const prefix = context.now_playing.is_playing ? "Playing on" : "Play on";
-      this.#device.textContent = selected ? `${prefix} ${selected.name}` : "Spotify device ready";
     }
 
     this.#markObservedPlayback(context.now_playing);
@@ -393,8 +501,7 @@ export class SpotifyResultsView {
         current.status.dataset.state = "verified";
         current.status.removeAttribute("role");
       }
-      const deviceName = playback.observed.device?.name;
-      if (deviceName) this.#device.textContent = `Playing on ${deviceName}`;
+      if (this.#deviceLabel) this.#deviceLabel.textContent = "Playing on";
     } catch {
       status.textContent = "Spotify could not start playback.";
       status.dataset.state = "error";
@@ -436,10 +543,7 @@ export class SpotifyResultsView {
       this.#clearCurrentCard();
       status.textContent = "Paused";
       status.dataset.state = "paused";
-      const deviceText = this.#device.textContent || "";
-      this.#device.textContent = deviceText.startsWith("Playing on ")
-        ? deviceText.replace("Playing on ", "Paused on ")
-        : "Spotify paused";
+      if (this.#deviceLabel) this.#deviceLabel.textContent = "Paused on";
     } catch {
       status.textContent = "Spotify could not pause playback.";
       status.dataset.state = "error";

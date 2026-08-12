@@ -117,7 +117,11 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
             "ui": {
                 "csp": {
                     "connectDomains": [],
-                    "resourceDomains": [],
+                    "resourceDomains": [
+                        "https://i.scdn.co",
+                        "https://image-cdn-fa.spotifycdn.com",
+                        "https://mosaic.scdn.co",
+                    ],
                     "frameDomains": [],
                     "baseUriDomains": [],
                 },
@@ -133,8 +137,13 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
                     {
                         "name": "Open Road",
                         "spotify_url": "https://open.spotify.com/track/track-1",
+                        "image_url": "https://i.scdn.co/image/track-1",
                         "subtitle": "Driver - Long Way Home",
                         "kind": "track",
+                        "artists": ["Driver"],
+                        "album": "Long Way Home",
+                        "duration_ms": 245000,
+                        "explicit": False,
                     }
                 ],
             },
@@ -148,9 +157,18 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
             {
                 "name": "Open Road",
                 "spotify_url": "https://open.spotify.com/track/track-1",
+                "image_url": "https://i.scdn.co/image/track-1",
                 "subtitle": "Driver - Long Way Home",
                 "kind": "track",
                 "reason": None,
+                "artists": ["Driver"],
+                "album": "Long Way Home",
+                "owner": None,
+                "description": None,
+                "duration_ms": 245000,
+                "explicit": False,
+                "item_count": None,
+                "release_date": None,
             }
         ],
     }
@@ -213,6 +231,15 @@ async def test_results_ui_normalizes_raw_search_items() -> None:
             "subtitle": "Florence + The Machine • Everybody Scream",
             "kind": "track",
             "reason": None,
+            "image_url": None,
+            "artists": ["Florence + The Machine"],
+            "album": "Everybody Scream",
+            "owner": None,
+            "description": None,
+            "duration_ms": None,
+            "explicit": None,
+            "item_count": None,
+            "release_date": None,
         }
     ]
 

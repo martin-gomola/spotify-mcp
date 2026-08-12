@@ -202,6 +202,28 @@ select {
   transition: background-color var(--transition);
 }
 
+.card.has-artwork {
+  grid-template-columns: 20px 44px minmax(0, 1fr) auto;
+}
+
+.card.is-hidden {
+  display: none;
+}
+
+.collection-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 104px;
+  padding: var(--space-4);
+}
+
+.collection-card.has-artwork {
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+}
+
+.collection-card::before {
+  display: none;
+}
+
 .card:last-child {
   border-bottom: 0;
 }
@@ -233,6 +255,28 @@ select {
   min-width: 0;
 }
 
+.item-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.artwork {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+}
+
+.artwork-prominent {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-control);
+}
+
 .name {
   margin: 0;
   overflow: hidden;
@@ -249,6 +293,26 @@ select {
 .reason,
 .card-status {
   margin: 2px 0 0;
+}
+
+.collection-card .name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.explicit-badge {
+  display: inline-flex;
+  min-width: 16px;
+  min-height: 16px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: var(--text-muted);
+  color: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .card-status:empty {
@@ -288,6 +352,30 @@ select {
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.results-footer {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.show-more {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 998px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.show-more:hover {
+  background: var(--surface-hover);
 }
 
 .play,
@@ -378,9 +466,60 @@ select {
 
 .play:focus-visible,
 .open-link:focus-visible,
+.show-more:focus-visible,
 select:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    padding: var(--space-3);
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .device {
+    max-width: 100%;
+  }
+
+  .card,
+  .card:not(.has-artwork) {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+
+  .card.has-artwork {
+    grid-template-columns: 20px 36px minmax(0, 1fr) auto;
+    gap: var(--space-2);
+  }
+
+  .card.has-artwork .artwork:not(.artwork-prominent) {
+    width: 36px;
+    height: 36px;
+  }
+
+  .collection-card,
+  .collection-card.has-artwork {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .collection-card:not(.has-artwork) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .collection-card .artwork-prominent {
+    width: 56px;
+    height: 56px;
+  }
+
+  .collection-card .actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
 }
 
 @keyframes pulse {

@@ -20,6 +20,7 @@ class PlaylistSummary(BaseModel):
     id: str
     name: str
     spotify_url: str | None = None
+    image_url: str | None = None
     item_count: int | None = Field(default=None, ge=0)
     public: bool | None = None
     collaborative: bool = False
@@ -40,6 +41,7 @@ class PlaylistDetails(BaseModel):
     id: str
     name: str
     spotify_url: str | None = None
+    image_url: str | None = None
     description: str
     owner: PlaylistOwner
     item_count: int | None = Field(default=None, ge=0)
@@ -74,6 +76,7 @@ class PlaylistCreateResult(BaseModel):
     playlist_id: str | None = None
     playlist_url: str | None = None
     spotify_url: str | None = None
+    image_url: str | None = None
     requested_public: bool
     observed_public: bool | None = None
     visibility_status: Literal["verified", "mismatch", "unknown"]
@@ -154,6 +157,17 @@ def _optional_entity_url(
     return _entity_url(data, item_type, value) if value is not None else None
 
 
+def _image_url(data: Mapping[str, Any]) -> str | None:
+    images = data.get("images")
+    if not isinstance(images, list):
+        return None
+    for image in images:
+        url = _mapping(image).get("url")
+        if isinstance(url, str) and url:
+            return url
+    return None
+
+
 def _metadata(raw: Any, requested_id: str) -> tuple[PlaylistDetails, set[str]]:
     data = _mapping(raw)
     owner = _mapping(data.get("owner"))
@@ -171,6 +185,7 @@ def _metadata(raw: Any, requested_id: str) -> tuple[PlaylistDetails, set[str]]:
             id=playlist_id,
             name=_string(data.get("name"), requested_id),
             spotify_url=resolved_url,
+            image_url=_image_url(data),
             description=_string(data.get("description")),
             owner=PlaylistOwner(
                 id=owner_id,
@@ -258,6 +273,7 @@ async def list_playlists(
                     id=playlist_id,
                     name=name,
                     spotify_url=_entity_url(data, "playlist", playlist_id),
+                    image_url=_image_url(data),
                     item_count=count if isinstance(count, int) and count >= 0 else None,
                     public=data.get("public") if isinstance(data.get("public"), bool) else None,
                     collaborative=data.get("collaborative") is True,
@@ -341,6 +357,7 @@ async def create_playlist(
             warning="Spotify returned success without a playlist ID; verify the playlist list",
         )
     playlist_url = _entity_url(created, "playlist", playlist_id)
+    created_image_url = _image_url(created)
     try:
         raw_observed = await spotify.request("GET", f"/playlists/{playlist_id}")
         observed, available = _metadata(raw_observed, playlist_id)
@@ -350,6 +367,7 @@ async def create_playlist(
             playlist_id=playlist_id,
             playlist_url=playlist_url,
             spotify_url=playlist_url,
+            image_url=created_image_url,
             requested_public=public,
             visibility_status="unknown",
             warning=f"Playlist was created, but visibility verification failed: {exc}",
@@ -360,6 +378,7 @@ async def create_playlist(
             playlist_id=playlist_id,
             playlist_url=playlist_url,
             spotify_url=playlist_url,
+            image_url=observed.image_url or created_image_url,
             requested_public=public,
             visibility_status="unknown",
             warning="Playlist was created, but Spotify omitted visibility during verification",
@@ -370,6 +389,7 @@ async def create_playlist(
         playlist_id=playlist_id,
         playlist_url=playlist_url,
         spotify_url=playlist_url,
+        image_url=observed.image_url or created_image_url,
         requested_public=public,
         observed_public=observed.public,
         visibility_status="verified" if matches else "mismatch",

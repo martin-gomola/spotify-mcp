@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite ui/spotify-results",
     "build:ui": "vite build --config ui/spotify-results/vite.config.ts",
     "test:ui": "vitest run --config ui/spotify-results/vitest.config.ts",
     "typecheck:ui": "tsc --noEmit -p ui/spotify-results/tsconfig.json"

@@ -17,6 +17,16 @@
 > This open-source project has no connection to Spotify AB. Use it in line with the
 > [Spotify Developer Policy](https://developer.spotify.com/policy).
 
+## ✨ Rich Spotify results, inside Codex
+
+Verified tracks, albums, artists, and playlists can appear as compact cards inside Codex. Choose a
+Spotify Connect device, start the exact result, or open its canonical Spotify page.
+
+![Codex creating and verifying a Spotify playlist, then presenting it as a playable result card with device selection](docs/assets/codex-playlist-result-card.png)
+
+<sub>A real Codex result: a 90-minute playlist created from Liked Songs, verified track by track,
+and returned as a playable Spotify card.</sub>
+
 ## 💬 What can I ask?
 
 > Play something I’ll like.
@@ -30,6 +40,8 @@ playlist into a DJ running order.
 
 - 🎶 **Play naturally:** resolve a precise track, album, artist, or playlist from a query, control
   seek, shuffle, repeat, volume, queue, and Spotify Connect devices.
+- 🖼️ **Act on visual results:** present the final verified selection as compact, playable cards in
+  Codex.
 - 🎧 **Find music from your library:** search your full Liked Songs history, including tracks you
   saved years ago.
 - 🧩 **Build with safeguards:** bundled workflows preserve Spotify track identities. They stop
@@ -70,6 +82,8 @@ make codex-install
 Approve the Spotify page that opens, then start a new Codex task. Codex starts the local server when
 you use it, so you can close the setup terminal. The [Codex plugin guide](plugins/spotify-mcp/README.md)
 explains how the plugin starts the server, what it includes, and what to ask first.
+
+![Spotify plugin page in Codex with example prompts and local MCP server](docs/assets/codex-plugin-page.png)
 
 ## 🛡️ Safety by default
 

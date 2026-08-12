@@ -165,16 +165,20 @@ preview, live snapshot, and target order are acceptable.
 
 | Tool | Inputs | Effect | Purpose |
 | --- | --- | --- | --- |
-| `spotify_render_results` | `title*`, `items*` | Local presentation; optional inline playback | Render 1–50 already-selected Spotify entities as compact cards in clients that support MCP Apps. |
+| `spotify_render_results` | `title*`, `items*` | Local presentation; optional inline playback | Render 1–50 already-selected Spotify entities as compact cards inside Codex. |
 
 Call the relevant data tools first, then prefer `spotify_render_results` for final, verified lists
-of playable entities. Track, album, artist, and playlist cards can start the exact canonical entity
-on an explicit usable device. When Spotify reports more than one controllable device, the card view
-requires a device choice even if one is currently marked active. A card says **Playing** only after
-one of the bounded fresh reads matches the requested item or context and device. If Spotify has not
-propagated matching state yet, the card keeps the accepted request as pending confirmation without
-retrying the write. Episodes and shows remain link-only, and every card keeps a secondary **Open in
-Spotify** action.
+of playable entities. Preserve available Spotify artwork and natural metadata such as artists,
+album, duration, explicit status, owner, description, and collection size. A single playlist,
+album, artist, or show uses a richer collection card. Longer result sets initially show six rows
+with **Show more** disclosure.
+
+Track, album, artist, and playlist cards can start the exact canonical entity on an explicit usable
+device. When Spotify reports more than one controllable device, the card view requires a device
+choice even if one is currently marked active. A card says **Playing** only after one of the bounded
+fresh reads matches the requested item or context and device. If Spotify has not propagated matching
+state yet, the card keeps the accepted request as pending confirmation without retrying the write.
+Episodes and shows remain link-only, and every card keeps a secondary **Open in Spotify** action.
 
 The renderer performs no discovery, ranking, verification of source data, or entity substitution.
 Its two resource-bound playback controls are app-visible discovery surfaces and are intentionally
