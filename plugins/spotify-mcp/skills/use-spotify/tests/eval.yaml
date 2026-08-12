@@ -16,4 +16,11 @@ cases:
     expectations:
       - "Reads only routes/catalog-library.md or routes/podcasts.md."
       - "Calls spotify_library_save with the exact show URI and reports verified state."
+  - name: show_existing_playlist
+    prompt: "Show me my AI DJ Small Set playlist."
+    expectations:
+      - "Reads only routes/playlists.md and resolves the exact playlist."
+      - "When MCP Apps are supported, calls spotify_render_results exactly once after verification and before the textual completion response."
+      - "Passes only the final playlist entity with kind: playlist and does not substitute a Markdown-only result."
+      - "Falls back to the canonical Spotify link only when cards are unavailable or the single render call fails."
 threshold: { pass_rate: 1.0 }

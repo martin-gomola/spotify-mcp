@@ -18,4 +18,11 @@ cases:
       - "Treats public visibility as accepted and continues the requested playlist-content work."
       - "Does not retry privacy updates, re-read visibility, inspect the plugin request path, or search for a private-creation workaround."
       - "Still verifies the final track URIs and order independently of visibility."
+  - name: verified_dj_apply_renders
+    prompt: "Apply the reviewed DJ order and show me the result."
+    expectations:
+      - "Applies the approved plan, then freshly verifies every exact playlist URI and position."
+      - "When MCP Apps are supported, calls spotify_render_results exactly once after verification and before the textual completion response."
+      - "Renders only the final playlist entity with kind: playlist; it does not treat a Markdown link as equivalent."
+      - "Falls back to the canonical Spotify link only when the renderer is unavailable or the single render call fails."
 threshold: { pass_rate: 1.0 }
