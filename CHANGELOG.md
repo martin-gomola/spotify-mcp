@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Extended the existing DJ analyze, plan, and apply workflow to generate new playlists from exact
+  tracks or ranked queries, with ReccoBeats fallback, deterministic transition costs, guarded
+  one-time creation, and exact final-order verification.
+
 ## 0.4.0
 
 - Added an optional `make codex-install-bundle` path and composition skill for private spoken-word

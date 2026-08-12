@@ -140,26 +140,34 @@ scores.
 
 | Tool | Inputs | Effect | Purpose |
 | --- | --- | --- | --- |
-| `spotify_dj_analyze` | `playlist_id*`, `source=auto`, `missing_feature_policy=anchor`, `overrides`, `features` | Spotify and/or ReccoBeats read + local immutable write | Read every playlist item, enrich exact recordings automatically, apply explicit overrides last, verify the snapshot, and store an analysis artifact with provenance and coverage. |
+| `spotify_dj_analyze` | Exactly one of `playlist_id` or `candidates` (2–100); `playlist_name="AI Harmonized DJ Set"`, `public=false`, `source=auto`, `missing_feature_policy`, `overrides`, `features` | Spotify and/or ReccoBeats read + local immutable write | Analyze a stable existing playlist or resolve IDs, URIs, and ranked track queries for a new set. Candidate tracks with incomplete tempo/key/energy are reported and skipped. |
 | `spotify_dj_audit` | `playlist_id*`, `source=auto`, `overrides` | Spotify and/or ReccoBeats read | Audit the complete playlist for feature coverage, duplicates, tempo ambiguity, provider conflicts, and heuristic opening/peak/reset candidates. |
-| `spotify_dj_plan` | `analysis_id*`, `energy_curve=warmup-build-peak-close`, `artist_spacing=3` | Local immutable write | Build a deterministic target order without changing Spotify. Curves: `warmup-build-peak-close`, `steady`, `rising`, or `waves`. |
-| `spotify_dj_apply` | `plan_id*`, `expected_snapshot_id`, `dry_run=true` | Preview or Spotify reorder writes + local receipt | Check snapshot and exact order, preview by default, or apply the planned range moves. |
+| `spotify_dj_plan` | `analysis_id*`, `strategy=auto`, `energy_curve=warmup-build-peak-close`, `artist_spacing=3` | Local immutable write | Build a deterministic order without changing Spotify. Auto uses the existing energy-curve planner for playlists and exact BPM/Camelot/energy transition costs for candidates. |
+| `spotify_dj_apply` | `plan_id*`, `expected_snapshot_id`, `dry_run=true` | Preview, verified Spotify reorder, or guarded playlist creation + local receipt | Reorder an existing snapshot-safe playlist or create and verify a candidate plan as a new playlist. |
 | `spotify_dj_restore` | `receipt_id*`, `expected_snapshot_id*`, `dry_run=true` | Preview or Spotify reorder writes + local receipt | Restore the exact pre-plan order recorded in a receipt. |
 | `spotify_playlist_sort_by_bpm` | `playlist_id*`, `mode=tempoEnergy`, `dry_run=true`, `allow_partial=false`, `source=auto`, `overrides` | Preview or Spotify reorder writes + local receipt | Run the legacy-compatible stable BPM/energy sort while anchoring unavailable positions and using the shared verified mutation executor. |
 
-DJ analysis automatically uses the shared audio-provider policy. Explicit `overrides` and legacy
-`features` remain available; explicit values win without erasing provider provenance. Missing
-values remain warnings with `anchor`, while `error` rejects incomplete analysis before storing an
-artifact. Duplicate playlist entries use position-safe occurrence tokens. Provider measurements
-are fetched live; no refresh option is exposed because this release does not cache them.
+DJ analysis automatically uses the shared audio-provider policy. Spotify audio features are tried
+first in `auto`; a 403 or 404 falls back to the free ReccoBeats API. Explicit `overrides` and legacy
+`features` win without erasing provider provenance. Existing playlists keep `anchor` and `error`
+policies. Candidate analysis uses `skip`, reports exact missing fields, and requires at least two
+complete tracks before storing an artifact. Duplicate occurrences remain distinct.
+
+Candidate transition planning starts with the lowest raw BPM, energy, and input position. Each next
+track minimizes `BPM difference × 1.5 + Camelot penalty + energy difference × 5`. Camelot costs are
+0 for an exact match, 2 for an adjacent number on the same side, 3 for relative major/minor, and
+`10 + 2 × circular distance` otherwise. The plan returns ordered recording evidence, every
+transition cost, and the total cost.
 
 `spotify_playlist_sort_by_bpm` preserves the original compatibility modes: `tempoEnergy`, its
 deprecated alias `dj`, `ascending`, and `descending`. It previews by default. With
 `allow_partial=true`, positions without BPM remain fixed rather than being dropped or guessed.
 
-If `expected_snapshot_id` is omitted from `spotify_dj_apply`, the plan's source snapshot is used.
-Restore always requires the currently expected snapshot explicitly. Keep `dry_run=true` until the
-preview, live snapshot, and target order are acceptable.
+If `expected_snapshot_id` is omitted for a reorder, the plan's source snapshot is used. Candidate
+apply rejects that argument, atomically claims the plan receipt, creates the requested playlist,
+verifies visibility before adding anything, then re-reads every page and compares exact URI order.
+Repeated apply returns the recorded result instead of creating another playlist. Restore remains
+limited to reorder receipts. Keep `dry_run=true` until the preview and exact order are acceptable.
 
 ## Optional result presentation
 

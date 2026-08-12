@@ -16,8 +16,12 @@ async def test_dj_analyze_exposes_automatic_audio_enrichment_inputs() -> None:
     tools = {tool.name: tool for tool in await server.list_tools()}
     properties = tools["spotify_dj_analyze"].input_schema["properties"]
     assert properties["source"]["default"] == "auto"
-    assert properties["missing_feature_policy"]["default"] == "anchor"
-    assert set(properties["missing_feature_policy"]["enum"]) == {"anchor", "error"}
+    assert properties["missing_feature_policy"]["default"] is None
+    policy_schema = properties["missing_feature_policy"]["anyOf"]
+    assert set(policy_schema[0]["enum"]) == {"anchor", "error", "skip"}
+    assert properties["playlist_name"]["default"] == "AI Harmonized DJ Set"
+    assert properties["public"]["default"] is False
+    assert properties["candidates"]["anyOf"][0]["maxItems"] == 100
     assert "overrides" in properties
     assert "features" in properties
 
@@ -34,11 +38,15 @@ async def test_dj_tools_expose_field_level_output_schemas() -> None:
     assert set(analyze_schema["properties"]) == {
         "schema_version",
         "analysis_id",
+        "source_kind",
         "playlist_id",
         "playlist_name",
         "snapshot_id",
+        "requested_public",
         "positions",
         "audio",
+        "resolved_candidates",
+        "skipped_candidates",
         "warnings",
     }
     audio_schema = analyze_schema["$defs"]["DjAudioResult"]
@@ -64,25 +72,24 @@ async def test_dj_tools_expose_field_level_output_schemas() -> None:
         "waves",
     ]
     assert plan_schema["properties"]["target_order"]["items"] == {"type": "string"}
+    assert plan_schema["properties"]["strategy"]["enum"] == [
+        "energy-curve",
+        "transition-cost",
+    ]
+    assert tools["spotify_dj_plan"].input_schema["properties"]["strategy"]["default"] == "auto"
 
-    for tool_name in ("spotify_dj_apply", "spotify_dj_restore"):
-        mutation_schema = tools[tool_name].output_schema
-        assert mutation_schema is not None
-        properties = mutation_schema["properties"]
-        assert properties["status"]["enum"] == [
-            "dry-run",
-            "unchanged",
-            "accepted",
-            "ambiguous",
-            "stale",
-            "partial",
-        ]
-        assert properties["action"]["enum"] == ["apply", "restore"]
-        assert properties["failure_reason"]["anyOf"] == [
-            {"type": "string"},
-            {"type": "null"},
-        ]
-        assert properties["warnings"]["items"] == {"type": "string"}
+    apply_schema = tools["spotify_dj_apply"].output_schema
+    assert apply_schema is not None
+    apply_properties = apply_schema["properties"]
+    assert apply_properties["operation"]["enum"] == ["reorder", "create"]
+    assert "verified" in apply_properties["status"]["enum"]
+    assert "already-applied" in apply_properties["status"]["enum"]
+
+    restore_schema = tools["spotify_dj_restore"].output_schema
+    assert restore_schema is not None
+    restore_properties = restore_schema["properties"]
+    assert restore_properties["operation"]["const"] == "reorder"
+    assert restore_properties["action"]["enum"] == ["apply", "restore"]
 
 
 def test_dj_mutation_result_preserves_intentional_failure_fields() -> None:
@@ -106,7 +113,7 @@ def test_dj_mutation_result_preserves_intentional_failure_fields() -> None:
     assert typed.action == "apply"
     assert typed.failure_reason == "snapshot-mismatch"
     assert typed.warnings == ["playlist changed"]
-    assert typed.model_dump()["schema_version"] == 1
+    assert typed.model_dump()["schema_version"] == 2
 
 
 @pytest.fixture

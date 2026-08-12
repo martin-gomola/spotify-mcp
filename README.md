@@ -98,6 +98,14 @@ DJ order that warms up, builds, peaks late, and closes with at least three track
 artist. Create a preview. Do not apply it yet.
 ```
 
+**Generate a new harmonically ordered DJ set**
+
+```text
+Analyze these tracks and queries as a new private playlist named Late Night Set: [paste candidates].
+Use the transition-cost DJ strategy, show the resolved and skipped tracks with BPM and Camelot
+evidence, and preview the order before creating anything on Spotify.
+```
+
 **Turn a document into a private Spotify episode**
 
 ```text

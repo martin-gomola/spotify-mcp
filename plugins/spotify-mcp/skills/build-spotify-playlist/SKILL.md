@@ -40,12 +40,18 @@ verify playback with bounded fresh reads; they never discover, rank, verify sour
 substitute an entity. Episodes and shows remain link/queue flows. Return canonical Markdown links
 when MCP Apps are unavailable.
 
-For DJ flow, start with the read-only `spotify_dj_audit`, then run `spotify_dj_analyze` and
-`spotify_dj_plan`. Analysis enriches recordings automatically and accepts exact overrides when
-provider evidence is incomplete. Use `missing_feature_policy=error` when every position must have
-complete planning evidence; otherwise keep `anchor` so missing-tempo positions cannot move.
-Preview the plan; use `spotify_dj_apply` only when mutation is explicitly requested, retaining its
-receipt for restore.
+For an existing-playlist DJ flow, start with the read-only `spotify_dj_audit`, then run
+`spotify_dj_analyze` with `playlist_id` and `spotify_dj_plan`. Use
+`missing_feature_policy=error` when every position must have complete evidence; otherwise keep
+`anchor` so missing-tempo positions cannot move.
+
+For a new set, call `spotify_dj_analyze` with `candidates` containing exact track IDs/URIs or search
+queries. It resolves exact recordings, uses Spotify audio evidence with free ReccoBeats fallback,
+and reports incomplete candidates instead of inventing values. Then call `spotify_dj_plan`; its
+`auto` strategy uses deterministic BPM/Camelot/energy transition costs for candidates. Preview the
+plan and use `spotify_dj_apply` only after mutation is explicitly requested. Candidate apply creates
+the playlist once and verifies visibility plus every URI position; creation receipts cannot be
+restored.
 
 Use `spotify_playlist_sort_by_bpm` only when the user explicitly wants the compatibility BPM sort.
 Keep its default dry run, inspect missing-feature and fixed-position warnings, and apply only after

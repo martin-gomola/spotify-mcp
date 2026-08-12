@@ -69,6 +69,11 @@ class SQLiteArtifactRepository:
     async def get_receipt(self, receipt_id: str) -> dict[str, Any]:
         return await asyncio.to_thread(self._get_receipt, receipt_id)
 
+    async def claim_receipt(
+        self, receipt_id: str, payload: Mapping[str, Any]
+    ) -> tuple[bool, dict[str, Any]]:
+        return await asyncio.to_thread(self._claim_receipt, receipt_id, dict(payload))
+
     def _connect(self) -> sqlite3.Connection:
         self._ensure_initialized()
         connection = sqlite3.connect(self.path, timeout=10)
@@ -133,7 +138,7 @@ class SQLiteArtifactRepository:
                 (artifact_id,),
             ).fetchone()
         stored_payload = self._verify_artifact_row(artifact_id, row)
-        if stored_payload != payload:
+        if canonical_json(stored_payload) != canonical_json(payload):
             raise ArtifactIntegrityError(f"artifact ID collision detected: {artifact_id}")
         return artifact_id
 
@@ -194,6 +199,30 @@ class SQLiteArtifactRepository:
                 (receipt_id, payload_json, digest, _SCHEMA_VERSION),
             )
         self._get_receipt(receipt_id)
+
+    def _claim_receipt(
+        self, receipt_id: str, payload: dict[str, Any]
+    ) -> tuple[bool, dict[str, Any]]:
+        """Atomically reserve a deterministic receipt ID or return its existing state."""
+
+        if not receipt_id.startswith("djr_"):
+            raise ValueError("receipt_id must start with djr_")
+        _assert_no_credentials(payload)
+        payload_json = canonical_json(payload)
+        digest = content_digest(
+            {"schema_version": _SCHEMA_VERSION, "receipt_id": receipt_id, "payload": payload}
+        )
+        with closing(self._connect()) as connection, connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO receipts
+                    (receipt_id, payload_json, digest, schema_version)
+                VALUES (?, ?, ?, ?)
+                """,
+                (receipt_id, payload_json, digest, _SCHEMA_VERSION),
+            )
+            claimed = cursor.rowcount == 1
+        return claimed, self._get_receipt(receipt_id)
 
     def _get_receipt(self, receipt_id: str) -> dict[str, Any]:
         with closing(self._connect()) as connection, connection:
