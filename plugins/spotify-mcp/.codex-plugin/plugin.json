@@ -1,6 +1,6 @@
 {
   "name": "spotify-mcp",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Local-first Spotify tools for music, podcasts, safe playlists, and DJ planning.",
   "author": { "name": "Martin Gomola" },
   "license": "MIT",

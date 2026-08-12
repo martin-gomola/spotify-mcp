@@ -1,16 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Added ambiguity-safe query playback plus seek, shuffle, repeat, and explicit Spotify Connect
   transfer controls.
 - Made device fallback require an explicit choice when several inactive devices are available.
 - Added guided `spotify-mcp init` onboarding with app-change reauthorization and live verification.
-- Added multi-version GitHub CI and Dependabot coverage.
-- Rendered initial tool input after the MCP Apps handshake, while preventing repeated result events
-  and stale playback-context responses from duplicating or flickering the inline results UI.
+- Added richer inline Spotify result cards with artwork, playback controls, and responsive layouts.
+- Rendered initial tool input after the MCP Apps handshake while preventing repeated result events
+  and stale playback context from duplicating or flickering the inline results UI.
 - Reduced inline-result latency with concurrent context reads and avoided false playback errors by
   polling fresh state briefly without repeating the Spotify write.
+- Made newly created playlists public by default and clarified supported Spotify visibility values.
+- Added multi-version GitHub CI, Dependabot coverage, and refreshed CI and UI test dependencies.
 
 ## 0.2.2
 
