@@ -33,19 +33,30 @@ Use exact Spotify URIs and finish with an observed playlist, not an optimistic s
    apply this stop rule to accepted public visibility.
 5. Re-read the entire result and compare exact URIs and order. Return the playlist URL, track list,
    arc, skipped candidates, and verification state.
+6. After a successful final verification, when the client supports MCP Apps, call
+   `spotify_render_results` exactly once before the textual completion response. Render only the
+   final playlist entity and include `kind: playlist`; a plain Markdown link is not a substitute
+   when the renderer is available. If rendering itself fails, report that failure and fall back to
+   the canonical Spotify link without retrying the renderer.
 
-When the client supports MCP Apps, prefer `spotify_render_results` for the final verified playable
-entities. Its cards can start the exact track, album, artist, or playlist on a selected device and
-verify playback with bounded fresh reads; they never discover, rank, verify source data, or
-substitute an entity. Episodes and shows remain link/queue flows. Return canonical Markdown links
-when MCP Apps are unavailable.
+Rich cards can start the exact track, album, artist, or playlist on a selected device and verify
+playback with bounded fresh reads; they never discover, rank, verify source data, or substitute an
+entity. Do not render a proposed order as though it were already applied. Episodes and shows remain
+link/queue flows. Return canonical Markdown links when MCP Apps are unavailable.
 
-For DJ flow, start with the read-only `spotify_dj_audit`, then run `spotify_dj_analyze` and
-`spotify_dj_plan`. Analysis enriches recordings automatically and accepts exact overrides when
-provider evidence is incomplete. Use `missing_feature_policy=error` when every position must have
-complete planning evidence; otherwise keep `anchor` so missing-tempo positions cannot move.
-Preview the plan; use `spotify_dj_apply` only when mutation is explicitly requested, retaining its
-receipt for restore.
+For an existing-playlist DJ flow, start with the read-only `spotify_dj_audit`, then run
+`spotify_dj_analyze` with `playlist_id` and `spotify_dj_plan`. Use
+`missing_feature_policy=error` when every position must have complete evidence; otherwise keep
+`anchor` so missing-tempo positions cannot move.
+
+For a new set, call `spotify_dj_analyze` with `candidates` containing exact track IDs/URIs or search
+queries. It resolves exact recordings, uses Spotify audio evidence with free ReccoBeats fallback,
+and reports incomplete candidates instead of inventing values. Then call `spotify_dj_plan`; its
+`auto` strategy uses deterministic normalized-BPM/Camelot/energy transition costs for candidates,
+including half/double-time tempo normalization. Preview the plan and use `spotify_dj_apply` only
+after mutation is explicitly requested. Candidate apply creates
+the playlist once and verifies visibility plus every URI position; creation receipts cannot be
+restored.
 
 Use `spotify_playlist_sort_by_bpm` only when the user explicitly wants the compatibility BPM sort.
 Keep its default dry run, inspect missing-feature and fixed-position warnings, and apply only after

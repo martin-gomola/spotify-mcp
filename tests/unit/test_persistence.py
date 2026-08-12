@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -27,6 +28,23 @@ async def test_immutable_artifacts_are_content_addressed_and_verified(tmp_path: 
 
 
 @pytest.mark.anyio
+async def test_immutable_artifact_reuse_normalizes_tuple_and_json_list_shapes(
+    tmp_path: Path,
+) -> None:
+    repository = SQLiteArtifactRepository(tmp_path / "state.sqlite3")
+    payload = {"artifact_kind": "analysis", "tracks": ({"artists": ("one", "two")},)}
+
+    first = await repository.put_immutable("analysis", payload)
+    second = await repository.put_immutable("analysis", payload)
+
+    assert first == second
+    assert await repository.get(first) == {
+        "artifact_kind": "analysis",
+        "tracks": [{"artists": ["one", "two"]}],
+    }
+
+
+@pytest.mark.anyio
 async def test_artifact_tampering_is_detected(tmp_path: Path) -> None:
     repository = SQLiteArtifactRepository(tmp_path / "state.sqlite3")
     artifact_id = await repository.put_immutable("plan", {"artifact_kind": "plan"})
@@ -48,6 +66,32 @@ async def test_receipts_have_stable_ids_and_verified_updates(tmp_path: Path) -> 
     await repository.put_receipt(receipt_id, {"status": "started", **identity})
     await repository.put_receipt(receipt_id, {"status": "accepted", **identity})
     assert await repository.get_receipt(receipt_id) == {"status": "accepted", **identity}
+
+
+@pytest.mark.anyio
+async def test_receipt_claim_allows_exactly_one_concurrent_owner(tmp_path: Path) -> None:
+    repository = SQLiteArtifactRepository(tmp_path / "state.sqlite3")
+    receipt_id = stable_receipt_id({"plan_id": "djp_create", "action": "create"})
+    payload = {"status": "started", "plan_id": "djp_create"}
+
+    results = await asyncio.gather(
+        *(repository.claim_receipt(receipt_id, payload) for _ in range(8))
+    )
+
+    assert sum(claimed for claimed, _ in results) == 1
+    assert all(stored == payload for _, stored in results)
+
+
+@pytest.mark.anyio
+async def test_receipt_claim_never_overwrites_existing_payload(tmp_path: Path) -> None:
+    repository = SQLiteArtifactRepository(tmp_path / "state.sqlite3")
+    receipt_id = stable_receipt_id({"plan_id": "djp_create", "action": "create"})
+
+    assert (await repository.claim_receipt(receipt_id, {"status": "started"}))[0] is True
+    claimed, stored = await repository.claim_receipt(receipt_id, {"status": "different"})
+
+    assert claimed is False
+    assert stored == {"status": "started"}
 
 
 @pytest.mark.anyio

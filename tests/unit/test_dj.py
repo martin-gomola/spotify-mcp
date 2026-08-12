@@ -7,7 +7,14 @@ from uuid import UUID
 
 import pytest
 
-from spotify_mcp.application.dj import analyze_playlist, apply_plan, restore_playlist
+from spotify_mcp.application.dj import (
+    analyze_candidates,
+    analyze_dj_source,
+    analyze_playlist,
+    apply_plan,
+    create_plan,
+    restore_playlist,
+)
 from spotify_mcp.application.playlist_mutation import execute_playlist_permutation
 from spotify_mcp.application.playlist_state import read_playlist_state
 from spotify_mcp.domain.audio import (
@@ -26,6 +33,9 @@ from spotify_mcp.domain.dj import (
     normalize_tempo,
     occurrence_tokens,
     plan_dj_set,
+    plan_transition_set,
+    transition_cost,
+    transition_key_penalty,
 )
 from spotify_mcp.domain.playlist_moves import plan_range_moves, simulate_range_moves
 
@@ -48,6 +58,14 @@ class MemoryArtifacts:
 
     async def get_receipt(self, receipt_id: str) -> dict[str, Any]:
         return self.receipts[receipt_id]
+
+    async def claim_receipt(
+        self, receipt_id: str, payload: Mapping[str, Any]
+    ) -> tuple[bool, dict[str, Any]]:
+        if receipt_id in self.receipts:
+            return False, self.receipts[receipt_id]
+        self.receipts[receipt_id] = dict(payload)
+        return True, self.receipts[receipt_id]
 
 
 class PlaylistGateway:
@@ -205,6 +223,91 @@ class IncompleteAudioGateway(AudioGateway):
         )
 
 
+class CandidateGateway:
+    def __init__(
+        self,
+        *,
+        observed_public: bool = False,
+        apply_items: bool = True,
+        ambiguous_add: bool = False,
+        fail_add: bool = False,
+        malformed_track: bool = False,
+    ) -> None:
+        self.observed_public = observed_public
+        self.apply_items = apply_items
+        self.ambiguous_add = ambiguous_add
+        self.fail_add = fail_add
+        self.malformed_track = malformed_track
+        self.created = 0
+        self.added = 0
+        self.item_reads = 0
+        self.order: list[str] = []
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,
+    ) -> Any:
+        if method == "GET" and path.startswith("/tracks/"):
+            track_id = path.rsplit("/", 1)[-1]
+            if self.malformed_track:
+                return {"id": track_id}
+            return _candidate_payload(track_id, f"Exact {track_id[-2:]}")
+        if method == "GET" and path == "/search":
+            assert params and params["limit"] == 10
+            return {
+                "tracks": {
+                    "total": 1,
+                    "items": [_candidate_payload("q" * 22, "Ranked query result")],
+                }
+            }
+        if method == "POST" and path == "/me/playlists":
+            self.created += 1
+            return {
+                "id": "created-1",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/created-1"},
+            }
+        if method == "GET" and path == "/playlists/created-1":
+            return {
+                "id": "created-1",
+                "name": "Generated",
+                "description": "",
+                "owner": {"id": "me"},
+                "public": self.observed_public,
+            }
+        if method == "POST" and path == "/playlists/created-1/items":
+            self.added += 1
+            if self.fail_add:
+                raise RuntimeError("write rejected")
+            assert isinstance(json, dict)
+            if self.apply_items:
+                self.order = list(json["uris"])
+            return {} if self.ambiguous_add else {"snapshot_id": "generated-snapshot"}
+        if method == "GET" and path == "/playlists/created-1/items":
+            self.item_reads += 1
+            offset = int((params or {}).get("offset", 0))
+            items = [
+                {"item": {"id": uri.rsplit(":", 1)[-1], "uri": uri, "type": "track", "name": uri}}
+                for uri in self.order
+            ]
+            return {"items": items[offset : offset + 50], "total": len(items)}
+        raise AssertionError(f"unexpected request: {method} {path}")
+
+
+def _candidate_payload(track_id: str, name: str) -> dict[str, Any]:
+    return {
+        "id": track_id,
+        "uri": f"spotify:track:{track_id}",
+        "name": name,
+        "type": "track",
+        "artists": [{"id": "artist-1", "name": "Artist"}],
+        "album": {"name": "Album"},
+    }
+
+
 def audio_feature(value: float | int) -> AudioFeature:
     return AudioFeature(
         selected=FeatureObservation(
@@ -257,6 +360,149 @@ def test_camelot_and_tempo_normalization() -> None:
     assert camelot_code(8, 0) == "1A"
     assert normalize_tempo(64) == 128
     assert normalize_tempo(174) == 87
+
+
+@pytest.mark.parametrize(
+    ("pitch", "mode", "expected"),
+    [
+        (0, 1, "8B"),
+        (1, 1, "3B"),
+        (2, 1, "10B"),
+        (3, 1, "5B"),
+        (4, 1, "12B"),
+        (5, 1, "7B"),
+        (6, 1, "2B"),
+        (7, 1, "9B"),
+        (8, 1, "4B"),
+        (9, 1, "11B"),
+        (10, 1, "6B"),
+        (11, 1, "1B"),
+        (0, 0, "5A"),
+        (1, 0, "12A"),
+        (2, 0, "7A"),
+        (3, 0, "2A"),
+        (4, 0, "9A"),
+        (5, 0, "4A"),
+        (6, 0, "11A"),
+        (7, 0, "6A"),
+        (8, 0, "1A"),
+        (9, 0, "8A"),
+        (10, 0, "3A"),
+        (11, 0, "10A"),
+    ],
+)
+def test_camelot_code_maps_all_pitch_mode_pairs(pitch: int, mode: int, expected: str) -> None:
+    assert camelot_code(pitch, mode) == expected
+
+
+def test_transition_cost_uses_exact_specification_components() -> None:
+    first = track("a", 0, energy=0.4, bpm=120, camelot="8A", artist="one")
+    second = track("b", 1, energy=0.7, bpm=124, camelot="9A", artist="two")
+
+    result = transition_cost(first, second)
+
+    assert transition_key_penalty("8A", "8A") == 0
+    assert transition_key_penalty("12B", "1B") == 2
+    assert transition_key_penalty("8A", "8B") == 3
+    assert transition_key_penalty("8A", "10B") == 14
+    assert result.bpm_delta == 4
+    assert result.energy_delta == 0.3
+    assert result.key_penalty == 2
+    assert result.cost == 9.5
+
+
+def test_transition_cost_uses_half_time_normalized_tempo() -> None:
+    first = track("a", 0, energy=0.5, bpm=86, camelot="8A", artist="one")
+    second = track("b", 1, energy=0.5, bpm=171, camelot="8A", artist="two")
+
+    result = transition_cost(first, second)
+
+    assert result.bpm_delta == 0.5
+    assert result.cost == 0.75
+    assert result.from_normalized_bpm == 86
+    assert result.to_normalized_bpm == 85.5
+
+
+def test_transition_cost_normalizes_the_small_set_half_time_track() -> None:
+    first = track("feel", 0, energy=0.924, bpm=127.937, camelot="9B", artist="Calvin")
+    second = track("lights", 1, energy=0.73, bpm=171.001, camelot="3B", artist="Weeknd")
+
+    result = transition_cost(first, second)
+
+    assert result.from_normalized_bpm == 127.937
+    assert result.to_normalized_bpm == 85.5005
+    assert result.bpm_delta == 42.4365
+    assert result.cost == 86.62475
+
+
+def test_transition_planner_starts_with_lowest_normalized_tempo() -> None:
+    analysis = DjAnalysis(
+        playlist_id=None,
+        playlist_name="Generated",
+        snapshot_id=None,
+        source_kind="candidates",
+        tracks=(
+            track("slow", 0, energy=0.5, bpm=86, camelot="8A", artist="one"),
+            track("double", 1, energy=0.5, bpm=171, camelot="8A", artist="two"),
+            track("fast", 2, energy=0.5, bpm=120, camelot="8A", artist="three"),
+        ),
+    )
+
+    plan = plan_transition_set(analysis, "analysis-1")
+
+    assert plan.target_order[:2] == (
+        "spotify:track:double#0",
+        "spotify:track:slow#0",
+    )
+    assert plan.transitions[0].bpm_delta == 0.5
+
+
+def test_transition_planner_is_deterministic_and_starts_at_lowest_tempo() -> None:
+    analysis = DjAnalysis(
+        playlist_id=None,
+        playlist_name="Generated",
+        snapshot_id=None,
+        source_kind="candidates",
+        tracks=(
+            track("high", 0, energy=0.2, bpm=128, camelot="8B", artist="a"),
+            track("intro", 1, energy=0.3, bpm=118, camelot="8B", artist="b"),
+            track("neighbor", 2, energy=0.35, bpm=120, camelot="9B", artist="c"),
+        ),
+    )
+
+    first = plan_transition_set(analysis, "analysis-1")
+    second = plan_transition_set(analysis, "analysis-1")
+
+    assert first == second
+    assert first.target_order == (
+        "spotify:track:intro#0",
+        "spotify:track:neighbor#0",
+        "spotify:track:high#0",
+    )
+    assert len(first.transitions) == 2
+    assert first.total_transition_cost == sum(item.cost for item in first.transitions)
+
+
+def test_transition_planner_selects_by_unrounded_cost_before_tie_breaking() -> None:
+    analysis = DjAnalysis(
+        playlist_id=None,
+        playlist_name="Generated",
+        snapshot_id=None,
+        source_kind="candidates",
+        tracks=(
+            track("expensive", 0, energy=0.4, bpm=100.666666993, camelot="8A", artist="a"),
+            track("cheaper", 1, energy=0.4, bpm=100.666666933, camelot="8A", artist="b"),
+            track("intro", 2, energy=0.4, bpm=100, camelot="8A", artist="c"),
+        ),
+    )
+
+    plan = plan_transition_set(analysis, "analysis-1")
+
+    assert plan.target_order[:2] == (
+        "spotify:track:intro#0",
+        "spotify:track:cheaper#0",
+    )
+    assert plan.total_transition_cost == sum(item.cost for item in plan.transitions)
 
 
 def test_occurrence_tokens_keep_duplicate_positions_distinct() -> None:
@@ -437,6 +683,236 @@ async def test_dj_analysis_rejects_snapshot_change_during_audio_lookup() -> None
         )
 
     assert artifacts.artifacts == {}
+
+
+@pytest.mark.anyio
+async def test_candidate_analysis_resolves_mixed_inputs_and_skips_incomplete_tracks() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway()
+    first_id = "a" * 22
+    second_id = "b" * 22
+    missing_id = "c" * 22
+    complete = [
+        {"track_id": first_id, "bpm": 118, "energy": 0.3, "key": 0, "mode": 1},
+        {"track_id": second_id, "bpm": 120, "energy": 0.4, "key": 7, "mode": 1},
+    ]
+
+    analysis_id, analysis = await analyze_candidates(
+        spotify,
+        artifacts,
+        [f"spotify:track:{first_id}", second_id, missing_id, "Halo"],
+        features=[
+            *complete,
+            {"track_id": "q" * 22, "bpm": 122, "energy": 0.5, "key": 2, "mode": 1},
+        ],
+    )
+
+    assert analysis.source_kind == "candidates"
+    assert analysis.playlist_id is None
+    assert analysis.snapshot_id is None
+    assert [track.track_id for track in analysis.tracks] == [first_id, second_id, "q" * 22]
+    assert analysis.resolved_candidates[-1].name == "Ranked query result"
+    assert analysis.skipped_candidates[0].track_id == missing_id
+    assert analysis.skipped_candidates[0].missing_fields == (
+        "tempo",
+        "key_or_mode",
+        "energy",
+    )
+    assert artifacts.artifacts[analysis_id]["source_kind"] == "candidates"
+
+
+@pytest.mark.anyio
+async def test_dj_source_requires_exactly_one_playlist_or_candidate_source() -> None:
+    artifacts = MemoryArtifacts()
+
+    with pytest.raises(ValueError, match="exactly one"):
+        await analyze_dj_source(CandidateGateway(), artifacts)
+    with pytest.raises(ValueError, match="exactly one"):
+        await analyze_dj_source(
+            CandidateGateway(), artifacts, playlist_id="playlist-1", candidates=["a", "b"]
+        )
+
+
+@pytest.mark.anyio
+async def test_auto_strategy_retains_energy_curve_for_playlist_analysis() -> None:
+    artifacts = MemoryArtifacts()
+    analysis = DjAnalysis(
+        playlist_id="playlist-1",
+        playlist_name="Set",
+        snapshot_id="s1",
+        tracks=(
+            track("a", 0, energy=0.7, bpm=124, camelot="8B", artist="one"),
+            track("b", 1, energy=0.3, bpm=120, camelot="9B", artist="two"),
+        ),
+    )
+    artifacts.artifacts["analysis-1"] = {"artifact_kind": "analysis", **asdict(analysis)}
+
+    _, plan = await create_plan(artifacts, "analysis-1")
+
+    assert plan.source_kind == "playlist"
+    assert plan.strategy == "energy-curve"
+
+
+@pytest.mark.anyio
+async def test_candidate_analysis_rejects_fewer_than_two_complete_tracks_without_artifact() -> None:
+    artifacts = MemoryArtifacts()
+    first_id = "a" * 22
+    second_id = "b" * 22
+
+    with pytest.raises(ValueError, match="at least two tracks with complete"):
+        await analyze_candidates(
+            CandidateGateway(),
+            artifacts,
+            [first_id, second_id],
+            features=[{"track_id": first_id, "bpm": 118, "energy": 0.3, "key": 0, "mode": 1}],
+        )
+
+    assert artifacts.artifacts == {}
+
+
+@pytest.mark.anyio
+async def test_candidate_analysis_propagates_malformed_provider_responses() -> None:
+    artifacts = MemoryArtifacts()
+
+    with pytest.raises(ValueError, match="malformed track metadata"):
+        await analyze_candidates(
+            CandidateGateway(malformed_track=True),
+            artifacts,
+            ["a" * 22, "b" * 22],
+        )
+
+    assert artifacts.artifacts == {}
+
+
+@pytest.mark.anyio
+async def test_candidate_auto_plan_and_apply_create_verified_private_playlist() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway()
+    ids = ["a" * 22, "b" * 22, "c" * 22]
+    features = [
+        {"track_id": ids[0], "bpm": 124, "energy": 0.7, "key": 7, "mode": 1},
+        {"track_id": ids[1], "bpm": 118, "energy": 0.3, "key": 0, "mode": 1},
+        {"track_id": ids[2], "bpm": 120, "energy": 0.4, "key": 7, "mode": 1},
+    ]
+    analysis_id, _ = await analyze_candidates(
+        spotify,
+        artifacts,
+        ids,
+        playlist_name="Generated",
+        features=features,
+    )
+    plan_id, plan = await create_plan(artifacts, analysis_id)
+
+    preview = await apply_plan(spotify, artifacts, plan_id)
+    applied = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+    repeated = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+
+    assert plan.strategy == "transition-cost"
+    assert preview.status == "dry-run"
+    assert spotify.created == 1
+    assert spotify.added == 1
+    assert applied.status == "verified"
+    assert applied.expected_order == applied.observed_order
+    assert repeated.status == "already-applied"
+    assert repeated.playlist_id == "created-1"
+
+
+@pytest.mark.anyio
+async def test_candidate_apply_stops_before_items_when_visibility_mismatches() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway(observed_public=True)
+    ids = ["a" * 22, "b" * 22]
+    analysis_id, _ = await analyze_candidates(
+        spotify,
+        artifacts,
+        ids,
+        features=[
+            {"track_id": ids[0], "bpm": 118, "energy": 0.3, "key": 0, "mode": 1},
+            {"track_id": ids[1], "bpm": 120, "energy": 0.4, "key": 7, "mode": 1},
+        ],
+    )
+    plan_id, _ = await create_plan(artifacts, analysis_id)
+
+    result = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+
+    assert result.status == "visibility-mismatch"
+    assert result.failure_reason == "playlist-visibility-unverified"
+    assert spotify.added == 0
+
+
+@pytest.mark.anyio
+async def test_candidate_apply_accepts_ambiguous_add_only_after_exact_readback() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway(ambiguous_add=True)
+    ids = ["a" * 22, "b" * 22]
+    analysis_id, _ = await analyze_candidates(
+        spotify,
+        artifacts,
+        ids,
+        features=[
+            {"track_id": ids[0], "bpm": 118, "energy": 0.3, "key": 0, "mode": 1},
+            {"track_id": ids[1], "bpm": 120, "energy": 0.4, "key": 7, "mode": 1},
+        ],
+    )
+    plan_id, _ = await create_plan(artifacts, analysis_id)
+
+    result = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+
+    assert result.status == "verified"
+    assert spotify.added == 1
+    assert "playlist item write was ambiguous" in result.warnings
+
+
+@pytest.mark.anyio
+async def test_candidate_apply_records_created_playlist_when_item_write_fails() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway(fail_add=True)
+    ids = ["a" * 22, "b" * 22]
+    analysis_id, _ = await analyze_candidates(
+        spotify,
+        artifacts,
+        ids,
+        features=[
+            {"track_id": ids[0], "bpm": 118, "energy": 0.3, "key": 0, "mode": 1},
+            {"track_id": ids[1], "bpm": 120, "energy": 0.4, "key": 7, "mode": 1},
+        ],
+    )
+    plan_id, _ = await create_plan(artifacts, analysis_id)
+
+    result = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+    repeated = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+
+    assert result.status == "partial"
+    assert result.playlist_id == "created-1"
+    assert result.failure_reason == "playlist-item-write-failure"
+    assert repeated.status == "partial"
+    assert repeated.playlist_id == "created-1"
+    assert spotify.created == 1
+
+
+@pytest.mark.anyio
+async def test_candidate_apply_pages_complete_verification_for_51_tracks() -> None:
+    artifacts = MemoryArtifacts()
+    spotify = CandidateGateway()
+    ids = [f"{index:022d}" for index in range(51)]
+    features = [
+        {
+            "track_id": track_id,
+            "bpm": 118 + index / 10,
+            "energy": 0.3 + index / 200,
+            "key": index % 12,
+            "mode": index % 2,
+        }
+        for index, track_id in enumerate(ids)
+    ]
+    analysis_id, _ = await analyze_candidates(spotify, artifacts, ids, features=features)
+    plan_id, _ = await create_plan(artifacts, analysis_id)
+
+    result = await apply_plan(spotify, artifacts, plan_id, dry_run=False)
+
+    assert result.status == "verified"
+    assert len(result.observed_order) == 51
+    assert spotify.item_reads == 2
 
 
 @pytest.mark.anyio

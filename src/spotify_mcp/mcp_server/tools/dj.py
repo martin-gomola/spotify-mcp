@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated, Any, Literal, cast
 
 from mcp.server import MCPServer
@@ -9,7 +10,10 @@ from mcp.server.mcpserver import Context
 from pydantic import BaseModel, ConfigDict, Field
 
 from spotify_mcp.application.dj import (
-    analyze_playlist,
+    DjApplyResult as ApplicationDjApplyResult,
+)
+from spotify_mcp.application.dj import (
+    analyze_dj_source,
     apply_plan,
     create_plan,
     restore_playlist,
@@ -21,7 +25,7 @@ from spotify_mcp.application.playlist_mutation import (
     ReceiptRepository,
 )
 from spotify_mcp.domain.audio import AudioLookupSource, AudioOverride
-from spotify_mcp.domain.dj import EnergyCurve, MissingFeaturePolicy
+from spotify_mcp.domain.dj import DjPlanStrategy, EnergyCurve, MissingFeaturePolicy
 from spotify_mcp.mcp_server.annotations import IDEMPOTENT_WRITE, WRITE
 from spotify_mcp.mcp_server.context import AppContext
 
@@ -60,37 +64,153 @@ class DjAudioResult(BaseModel):
     coverage: DjAudioCoverageResult
 
 
-class DjAnalysisResult(BaseModel):
-    """Stored, snapshot-bound DJ analysis summary."""
+class DjResolvedCandidateResult(BaseModel):
+    """A user input resolved to one exact Spotify recording."""
 
-    schema_version: Literal[1] = 1
+    input_index: int = Field(ge=0)
+    candidate: str
+    track_id: str
+    uri: str
+    name: str
+    artists: list[str]
+
+
+class DjSkippedCandidateResult(BaseModel):
+    """A candidate excluded before transition planning."""
+
+    input_index: int = Field(ge=0)
+    candidate: str
+    reason: str
+    track_id: str | None
+    missing_fields: list[str]
+
+
+class DjPlannedTrackResult(BaseModel):
+    position_token: str
+    original_position: int = Field(ge=0)
+    target_energy: float | None = Field(default=None, ge=0, le=1)
+    uri: str | None
+    name: str
+    artists: list[str]
+    bpm: float | None = Field(default=None, gt=0)
+    normalized_bpm: float | None = Field(default=None, gt=0)
+    energy: float | None = Field(default=None, ge=0, le=1)
+    camelot: str | None
+    sources: list[str]
+
+
+class DjTransitionResult(BaseModel):
+    from_position_token: str
+    to_position_token: str
+    bpm_delta: float = Field(ge=0)
+    energy_delta: float = Field(ge=0, le=1)
+    key_penalty: float = Field(ge=0)
+    cost: float = Field(ge=0)
+    from_normalized_bpm: float | None = Field(default=None, gt=0)
+    to_normalized_bpm: float | None = Field(default=None, gt=0)
+
+
+class DjAnalysisResult(BaseModel):
+    """Stored playlist- or candidate-bound DJ analysis summary."""
+
+    schema_version: Literal[2] = 2
     analysis_id: str
-    playlist_id: str
+    source_kind: Literal["playlist", "candidates"]
+    playlist_id: str | None
     playlist_name: str
-    snapshot_id: str
+    snapshot_id: str | None
+    requested_public: bool
     positions: int = Field(ge=0)
     audio: DjAudioResult
+    resolved_candidates: list[DjResolvedCandidateResult]
+    skipped_candidates: list[DjSkippedCandidateResult]
     warnings: list[str]
 
 
 class DjPlanResult(BaseModel):
     """Immutable deterministic DJ plan returned to MCP clients."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     plan_id: str
     analysis_id: str
-    playlist_id: str
-    source_snapshot_id: str
+    source_kind: Literal["playlist", "candidates"]
+    playlist_id: str | None
+    source_snapshot_id: str | None
+    requested_public: bool
+    strategy: Literal["energy-curve", "transition-cost"]
     energy_curve: EnergyCurve
     original_order: list[str]
     target_order: list[str]
+    ordered_tracks: list[DjPlannedTrackResult]
+    transitions: list[DjTransitionResult]
+    total_transition_cost: float = Field(ge=0)
+    resolved_candidates: list[DjResolvedCandidateResult]
+    skipped_candidates: list[DjSkippedCandidateResult]
     warnings: list[str]
+
+
+class DjApplyResult(BaseModel):
+    """Typed outcome for an existing reorder or candidate playlist creation."""
+
+    schema_version: Literal[2] = 2
+    operation: Literal["reorder", "create"]
+    status: Literal[
+        "dry-run",
+        "unchanged",
+        "accepted",
+        "verified",
+        "already-applied",
+        "ambiguous",
+        "stale",
+        "partial",
+        "visibility-mismatch",
+    ]
+    action: Literal["apply", "create"]
+    plan_id: str
+    playlist_id: str | None
+    playlist_url: str | None
+    expected_snapshot_id: str | None
+    initial_snapshot_id: str | None
+    final_snapshot_id: str | None
+    completed_moves: int = Field(ge=0)
+    total_moves: int = Field(ge=0)
+    receipt_id: str | None
+    warnings: list[str]
+    failure_reason: str | None
+    requested_public: bool | None
+    observed_public: bool | None
+    expected_order: list[str]
+    observed_order: list[str]
+
+    @classmethod
+    def from_application(cls, result: ApplicationDjApplyResult) -> DjApplyResult:
+        return cls(
+            operation=result.operation,
+            status=result.status,
+            action=result.action,
+            plan_id=result.plan_id,
+            playlist_id=result.playlist_id,
+            playlist_url=result.playlist_url,
+            expected_snapshot_id=result.expected_snapshot_id,
+            initial_snapshot_id=result.initial_snapshot_id,
+            final_snapshot_id=result.final_snapshot_id,
+            completed_moves=result.completed_moves,
+            total_moves=result.total_moves,
+            receipt_id=result.receipt_id,
+            warnings=list(result.warnings),
+            failure_reason=result.failure_reason,
+            requested_public=result.requested_public,
+            observed_public=result.observed_public,
+            expected_order=list(result.expected_order),
+            observed_order=list(result.observed_order),
+        )
 
 
 class DjMutationResult(BaseModel):
     """Typed outcome of applying or restoring a DJ playlist permutation."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
+    operation: Literal["reorder"] = "reorder"
     status: MutationStatus
     action: PlaylistMutationAction
     playlist_id: str
@@ -131,25 +251,33 @@ def register(server: MCPServer[AppContext]) -> None:
         structured_output=True,
     )
     async def analyze_dj_playlist(
-        playlist_id: str,
         ctx: Context[AppContext, Any],
+        playlist_id: Annotated[str | None, Field(min_length=1)] = None,
+        candidates: Annotated[list[str] | None, Field(min_length=2, max_length=100)] = None,
+        playlist_name: Annotated[str, Field(min_length=1, max_length=100)] = (
+            "AI Harmonized DJ Set"
+        ),
+        public: bool = False,
         source: AudioLookupSource = AudioLookupSource.AUTO,
-        missing_feature_policy: MissingFeaturePolicy = "anchor",
+        missing_feature_policy: MissingFeaturePolicy | None = None,
         overrides: Annotated[list[AudioOverride], Field(max_length=100)] | None = None,
         features: list[AudioFeatureInput] | None = None,
     ) -> DjAnalysisResult:
         """Fetch current audio evidence and store a position-safe DJ analysis.
 
-        Use ``anchor`` to retain incomplete tracks in place or ``error`` to reject
-        incomplete analysis. Explicit legacy ``features`` override provider values.
-        Audio is fetched for each call; this tool does not maintain a feature cache.
+        Provide exactly one of ``playlist_id`` or ``candidates``. Playlist analysis
+        defaults to anchoring missing-tempo positions. Candidate analysis resolves exact
+        recordings, skips incomplete audio evidence, and stores no Spotify mutation.
         """
 
         app = ctx.request_context.lifespan_context
-        analysis_id, analysis = await analyze_playlist(
+        analysis_id, analysis = await analyze_dj_source(
             app.spotify,
             app.artifacts,
-            playlist_id,
+            playlist_id=playlist_id,
+            candidates=candidates or [],
+            playlist_name=playlist_name,
+            public=public,
             audio=app.audio,
             source=source,
             overrides=overrides or [],
@@ -162,9 +290,11 @@ def register(server: MCPServer[AppContext]) -> None:
                 provider_positions[provider] = provider_positions.get(provider, 0) + 1
         return DjAnalysisResult(
             analysis_id=analysis_id,
+            source_kind=analysis.source_kind,
             playlist_id=analysis.playlist_id,
             playlist_name=analysis.playlist_name,
             snapshot_id=analysis.snapshot_id,
+            requested_public=analysis.requested_public,
             positions=len(analysis.tracks),
             audio=DjAudioResult(
                 requested_source=cast(DjAudioSource, analysis.audio_source),
@@ -179,6 +309,14 @@ def register(server: MCPServer[AppContext]) -> None:
                     unresolved_position_tokens=list(analysis.coverage.unresolved_position_tokens),
                 ),
             ),
+            resolved_candidates=[
+                DjResolvedCandidateResult.model_validate(asdict(item))
+                for item in analysis.resolved_candidates
+            ],
+            skipped_candidates=[
+                DjSkippedCandidateResult.model_validate(asdict(item))
+                for item in analysis.skipped_candidates
+            ],
             warnings=list(analysis.warnings),
         )
 
@@ -188,6 +326,7 @@ def register(server: MCPServer[AppContext]) -> None:
         ctx: Context[AppContext, Any],
         energy_curve: EnergyCurve = "warmup-build-peak-close",
         artist_spacing: Annotated[int, Field(ge=0, le=20)] = 3,
+        strategy: DjPlanStrategy = "auto",
     ) -> DjPlanResult:
         """Create an immutable deterministic DJ order without changing Spotify."""
 
@@ -197,15 +336,34 @@ def register(server: MCPServer[AppContext]) -> None:
             analysis_id,
             energy_curve=energy_curve,
             artist_spacing=artist_spacing,
+            strategy=strategy,
         )
         return DjPlanResult(
             plan_id=plan_id,
             analysis_id=analysis_id,
+            source_kind=plan.source_kind,
             playlist_id=plan.playlist_id,
             source_snapshot_id=plan.source_snapshot_id,
+            requested_public=plan.requested_public,
+            strategy=plan.strategy,
             energy_curve=plan.energy_curve,
             original_order=list(plan.original_order),
             target_order=list(plan.target_order),
+            ordered_tracks=[
+                DjPlannedTrackResult.model_validate(asdict(item)) for item in plan.ordered_tracks
+            ],
+            transitions=[
+                DjTransitionResult.model_validate(asdict(item)) for item in plan.transitions
+            ],
+            total_transition_cost=plan.total_transition_cost,
+            resolved_candidates=[
+                DjResolvedCandidateResult.model_validate(asdict(item))
+                for item in plan.resolved_candidates
+            ],
+            skipped_candidates=[
+                DjSkippedCandidateResult.model_validate(asdict(item))
+                for item in plan.skipped_candidates
+            ],
             warnings=list(plan.warnings),
         )
 
@@ -215,7 +373,7 @@ def register(server: MCPServer[AppContext]) -> None:
         ctx: Context[AppContext, Any],
         expected_snapshot_id: str | None = None,
         dry_run: bool = True,
-    ) -> DjMutationResult:
+    ) -> DjApplyResult:
         """Preview or apply a plan with snapshot checks, receipts, and fresh verification."""
 
         app = ctx.request_context.lifespan_context
@@ -226,7 +384,7 @@ def register(server: MCPServer[AppContext]) -> None:
             expected_snapshot_id=expected_snapshot_id,
             dry_run=dry_run,
         )
-        return DjMutationResult.from_mutation(result)
+        return DjApplyResult.from_application(result)
 
     @server.tool(name="spotify_dj_restore", annotations=WRITE, structured_output=True)
     async def restore_dj_playlist(

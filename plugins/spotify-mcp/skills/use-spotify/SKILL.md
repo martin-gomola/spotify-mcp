@@ -16,5 +16,8 @@ Read only the matching route file, then call only the tools named there.
 - Existing playlist lookup or contents: [routes/playlists.md](routes/playlists.md)
 
 If a request crosses routes, read only those routes. Preserve exact Spotify URIs, inspect uncertain
-write results, and use `spotify_render_results` once only after the final playable results are
-verified. Use canonical Spotify links when cards are unavailable.
+write results, and, when MCP Apps are supported, call `spotify_render_results` exactly once after
+the final playable results are verified and before the textual completion response. Every rendered
+item must include its concrete `kind`; use `kind: playlist` for playlist cards. A plain Markdown
+link is not a substitute when the renderer is available. If rendering itself fails, report it and
+fall back to canonical Spotify links without retrying the renderer.
