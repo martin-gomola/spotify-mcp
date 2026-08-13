@@ -36,6 +36,7 @@ def tool_names() -> set[str]:
             if value.startswith("spotify_") and re.fullmatch(r"spotify_[a-z0-9_]+", value):
                 names.add(value)
     names.add("spotify_render_results")
+    names.add("spotify_render_route_approval")
     names.add("spotify_status")
     return names
 
@@ -193,6 +194,9 @@ def check_ui_bundle(errors: list[str]) -> None:
         "ui/notifications/tool-result",
         "spotify_results_context",
         "spotify_results_play",
+        "ui/message",
+        "Approve route",
+        "Adjust pins",
     ):
         if marker not in html:
             errors.append(f"MCP Apps result HTML is missing required marker: {marker}")

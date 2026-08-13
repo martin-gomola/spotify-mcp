@@ -1,6 +1,6 @@
 ---
 name: create-private-spotify-podcast
-description: Convert user-provided documents, PDFs, notes, or transcripts into polished private Spotify podcast episodes. Use when the user asks to turn written source material into private Spotify audio. This integration composes the external $save-to-spotify production skill with local Kokoro narration and optional placement in an owned private Spotify playlist.
+description: Convert user-provided documents, PDFs, notes, or transcripts into polished private Spotify podcast episodes. Use when the user asks to turn written source material into private Spotify audio. This integration composes the external $save-to-spotify production skill with approved local narration and optional placement in an owned private Spotify playlist.
 ---
 
 # Create a private Spotify podcast
@@ -15,10 +15,14 @@ weaken its interview, chapter approval, preview, upload, timeline, cover, or rea
    companion directly from this skill.
 2. Run `save-to-spotify --json doctor` before sourcing or scripting. If authentication is missing,
    follow `$save-to-spotify` setup guidance; its Spotify authorization is separate from Spotify MCP.
-3. Version one supports only Kokoro. If doctor does not report Kokoro as available, explain that it
-   is a free local download of approximately 340 MB, request confirmation, then run
-   `save-to-spotify tts setup --engine kokoro`. Do not offer or require cloud TTS providers or API
-   keys. Confirm Kokoro is available before scripting.
+3. Version one supports local Kokoro and Pocket TTS. Reuse the user's already approved local engine
+   and voices when they are ready. If no local engine is approved, use Kokoro as the stable default:
+   explain that it is a free local download of approximately 340 MB, request confirmation, then run
+   `save-to-spotify tts setup --engine kokoro`. Pocket TTS may be offered as an optional local
+   alternative for multi-speaker productions; install it with
+   `save-to-spotify tts setup --engine pocket-tts`, generate a matched local A/B preview, and do not
+   make it the default until the user approves the voices. Do not offer or require cloud TTS
+   providers or API keys. Confirm the selected local engine is available before scripting.
 4. Inspect the proposed source before upload. Refuse content containing credentials, third-party
    personal data, or confidential business information. Ask the user for a redacted source instead;
    never copy sensitive values into scripts, logs, descriptions, timelines, or tool arguments.

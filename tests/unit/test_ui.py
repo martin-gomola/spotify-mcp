@@ -95,9 +95,14 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
         }
 
         tool = tools["spotify_render_results"]
+        route_tool = tools["spotify_render_route_approval"]
         assert tool.meta == {
             "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["model"]},
         }
+        assert route_tool.meta == {
+            "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["model"]},
+        }
+        assert "prose-only" in (route_tool.description or "")
         assert tools["spotify_results_context"].meta == {
             "ui": {"resourceUri": RESULTS_UI_URI, "visibility": ["app"]}
         }
@@ -148,6 +153,18 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
                 ],
             },
         )
+        route_approval = await client.call_tool(
+            "spotify_render_route_approval",
+            {
+                "title": "Approve the Bratislava route",
+                "summary": "2 pins, 1.2 km",
+                "pins": [
+                    {"order": 1, "name": "Michael's Gate", "kind": "chapter"},
+                    {"order": 2, "name": "Turn left", "kind": "navigation"},
+                ],
+                "route_urls": ["https://maps.google.com/?q=route"],
+            },
+        )
         resource = await client.read_resource(RESULTS_UI_URI)
 
     assert rendered.is_error is False
@@ -173,6 +190,30 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
         ],
     }
     assert rendered.content
+    assert route_approval.is_error is False
+    assert route_approval.structured_content == {
+        "view": "route_approval",
+        "title": "Approve the Bratislava route",
+        "summary": "2 pins, 1.2 km",
+        "pins": [
+            {
+                "order": 1,
+                "name": "Michael's Gate",
+                "kind": "chapter",
+                "note": None,
+                "map_url": None,
+            },
+            {
+                "order": 2,
+                "name": "Turn left",
+                "kind": "navigation",
+                "note": None,
+                "map_url": None,
+            },
+        ],
+        "starting_point_url": None,
+        "route_urls": ["https://maps.google.com/?q=route"],
+    }
     assert "Road-trip picks" in rendered.content[0].text
     html = resource.contents[0].text
     assert html is not None
@@ -183,6 +224,34 @@ async def test_results_ui_is_optional_mcp_apps_resource_with_text_fallback() -> 
     assert "--radius-container:12px" in html
     assert "--radius-control:8px" in html
     assert ".play.is-pause" in html
+    assert "Approve route" in html
+    assert "Adjust pins" in html
+    assert "ui/message" in html
+
+
+@pytest.mark.anyio
+async def test_route_approval_rejects_unsafe_map_urls() -> None:
+    apps = create_results_apps()
+    server: MCPServer[None] = MCPServer("test", extensions=[apps])
+
+    async with Client(server) as client:
+        rendered = await client.call_tool(
+            "spotify_render_route_approval",
+            {
+                "title": "Unsafe route",
+                "summary": "One pin",
+                "pins": [
+                    {
+                        "order": 1,
+                        "name": "Bad pin",
+                        "kind": "chapter",
+                        "map_url": "https://user:secret@127.0.0.1/route",
+                    }
+                ],
+            },
+        )
+
+    assert rendered.is_error is True
 
 
 def test_results_ui_uses_even_pixel_spacing_and_radii() -> None:

@@ -1,6 +1,6 @@
 # Tool catalog
 
-Spotify MCP exposes 55 model-visible structured tools. Asterisks in the input column mark required
+Spotify MCP exposes 56 model-visible structured tools. Asterisks in the input column mark required
 fields; all other inputs are optional and use the defaults shown below.
 
 ## Status and discovery
@@ -176,6 +176,7 @@ limited to reorder receipts. Keep `dry_run=true` until the preview and exact ord
 | Tool | Inputs | Effect | Purpose |
 | --- | --- | --- | --- |
 | `spotify_render_results` | `title*`, `items*` | Local presentation; optional inline playback | Render 1–50 already-selected Spotify entities as compact cards inside Codex. |
+| `spotify_render_route_approval` | `title*`, `summary*`, `pins*`, `starting_point_url`, `route_urls` | Local presentation; sends only the selected response | Render an ordered tour route with **Approve route** and **Adjust pins** quick actions at the required approval gate. |
 
 Call the relevant data tools first, then prefer `spotify_render_results` for final, verified lists
 of playable entities. Preserve available Spotify artwork and natural metadata such as artists,
@@ -189,6 +190,11 @@ choice even if one is currently marked active. A card says **Playing** only afte
 fresh reads matches the requested item or context and device. If Spotify has not propagated matching
 state yet, the card keeps the accepted request as pending confirmation without retrying the write.
 Episodes and shows remain link-only, and every card keeps a secondary **Open in Spotify** action.
+
+Walking-tour flows use `spotify_render_route_approval` after route extraction and mapping. Its
+buttons send an ordinary user response through the MCP Apps `ui/message` capability; they do not
+approve, research, script, upload, or otherwise mutate the tour by themselves. Hosts without that
+capability keep the structured route and text fallback so the user can reply in chat.
 
 The renderer performs no discovery, ranking, verification of source data, or entity substitution.
 Its two resource-bound playback controls are app-visible discovery surfaces and are intentionally

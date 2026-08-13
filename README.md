@@ -36,8 +36,9 @@ episode. Codex plans the chapters, lets you approve the script and local preview
 local Kokoro speech from a small model of about 340 MB, uploads through Spotify's official Save to
 Spotify companion, and waits until Spotify reports the episode ready. No TTS API key is required.
 
-I use it for automated morning briefings and as a travel guide. Before a trip, I turn my notes into
-an episode, download it, and listen offline while walking around.
+I use it for automated morning briefings and private spoken notes. Dedicated walking-tour
+discovery, routing, and chapter production now live in
+[Side Street Audio](https://github.com/martin-gomola/side-street-audio).
 
 ```bash
 make codex-install-bundle
@@ -46,19 +47,6 @@ make codex-install-bundle
 The basic Spotify MCP and Save to Spotify keep separate authorization grants and private token
 stores. Generated episodes remain in a private Spotify show, and the bundle includes safe,
 readback-verified deletion when you no longer want one.
-
-<p align="center">
-  <img src="docs/assets/codex-private-podcast-prompt.png" width="619" alt="Codex prompt requesting a private Spotify audio tour of Villa Ephrussi with chapter and preview approval">
-</p>
-
-<p align="center">
-  <img src="docs/assets/private-podcast-show.png" width="680" alt="A private Kokoro-narrated Villa Ephrussi tour guide created by the Spotify MCP bundle and ready in Spotify">
-</p>
-
-<sub>A real bundle result: a locally narrated Villa Ephrussi tour guide with private Spotify
-hosting, cover art, chapters, official source links, and completed processing.</sub>
-
-▶️ [Listen to chapter 1: A Villa Between Two Seas (MP3, 1:03)](docs/assets/villa-ephrussi-first-chapter.mp3)
 
 ## 💬 What can I ask?
 

@@ -24,6 +24,12 @@ const view = new SpotifyResultsView({
   openLink(url) {
     return app.openLink({ url });
   },
+  sendMessage(text) {
+    return app.sendMessage({ role: "user", content: [{ type: "text", text }] });
+  },
+  canSendMessage() {
+    return Boolean(app.getHostCapabilities()?.message?.text);
+  },
 });
 
 let connected = false;

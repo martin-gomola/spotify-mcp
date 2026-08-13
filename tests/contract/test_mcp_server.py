@@ -48,6 +48,7 @@ PUBLIC_TOOLS = {
     "spotify_previous",
     "spotify_queue",
     "spotify_render_results",
+    "spotify_render_route_approval",
     "spotify_recently_played",
     "spotify_taste_recommendations",
     "spotify_resume",
