@@ -8,14 +8,18 @@ def _skill_text() -> str:
     return SKILL.read_text(encoding="utf-8")
 
 
-def test_private_podcast_skill_keeps_external_companion_and_kokoro_boundary() -> None:
+def test_private_podcast_skill_keeps_external_companion_and_local_tts_boundary() -> None:
     text = _skill_text()
+    normalized = " ".join(text.split())
 
     assert "$save-to-spotify" in text
     assert "make codex-install-bundle" in text
     assert "save-to-spotify --json doctor" in text
     assert "save-to-spotify tts setup --engine kokoro" in text
-    assert "Do not offer or require cloud TTS providers or API" in text
+    assert "save-to-spotify tts setup --engine pocket-tts" in text
+    assert "matched local A/B preview" in text
+    assert "do not make it the default until the user approves" in normalized
+    assert "Do not offer or require cloud TTS providers or API" in normalized
 
 
 def test_private_podcast_skill_requires_ready_before_playlist_write() -> None:
