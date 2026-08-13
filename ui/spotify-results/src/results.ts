@@ -18,6 +18,23 @@ export interface SpotifyResultsPayload {
   items: SpotifyResultItem[];
 }
 
+interface RouteApprovalPin {
+  order: number;
+  name: string;
+  kind: "chapter" | "navigation";
+  note?: string | null;
+  map_url?: string | null;
+}
+
+interface RouteApprovalPayload {
+  view: "route_approval";
+  title: string;
+  summary: string;
+  pins: RouteApprovalPin[];
+  starting_point_url?: string | null;
+  route_urls: string[];
+}
+
 interface Device {
   id?: string | null;
   name: string;
@@ -68,6 +85,8 @@ export interface ToolCallResult {
 export interface ResultsBridge {
   callServerTool(name: string, args: Record<string, unknown>): Promise<ToolCallResult>;
   openLink(url: string): Promise<{ isError?: boolean }>;
+  sendMessage?(text: string): Promise<{ isError?: boolean }>;
+  canSendMessage?(): boolean;
 }
 
 interface CardView {
@@ -101,6 +120,18 @@ function textList(value: unknown): string[] {
 
 function optionalInteger(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function safeHttpsUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.hostname && !parsed.username && !parsed.password
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatDuration(durationMs: number | null | undefined, compact = false): string | null {
@@ -180,6 +211,53 @@ function normalizeResultsPayload(value: unknown): SpotifyResultsPayload | null {
   const items = value.items.map(normalizeResultItem);
   if (items.some((item) => item === null)) return null;
   return { title: value.title, items: items as SpotifyResultItem[] };
+}
+
+function normalizeRouteApprovalPayload(value: unknown): RouteApprovalPayload | null {
+  if (
+    !isObject(value)
+    || value.view !== "route_approval"
+    || typeof value.title !== "string"
+    || typeof value.summary !== "string"
+    || !Array.isArray(value.pins)
+    || !Array.isArray(value.route_urls)
+  ) return null;
+  const pins = value.pins.map((pin): RouteApprovalPin | null => {
+    if (
+      !isObject(pin)
+      || !Number.isInteger(pin.order)
+      || typeof pin.name !== "string"
+      || (pin.kind !== "chapter" && pin.kind !== "navigation")
+    ) return null;
+    const mapUrl = pin.map_url == null ? null : safeHttpsUrl(pin.map_url);
+    if (pin.map_url != null && mapUrl === null) return null;
+    return {
+      order: pin.order as number,
+      name: pin.name,
+      kind: pin.kind,
+      note: typeof pin.note === "string" ? pin.note : null,
+      map_url: mapUrl,
+    };
+  });
+  const routeUrls = value.route_urls.map(safeHttpsUrl);
+  const startingPointUrl = value.starting_point_url == null
+    ? null
+    : safeHttpsUrl(value.starting_point_url);
+  if (
+    pins.some((pin) => pin === null)
+    || routeUrls.some((url) => url === null)
+    || (value.starting_point_url != null && startingPointUrl === null)
+  ) {
+    return null;
+  }
+  return {
+    view: "route_approval",
+    title: value.title,
+    summary: value.summary,
+    pins: pins as RouteApprovalPin[],
+    starting_point_url: startingPointUrl,
+    route_urls: routeUrls as string[],
+  };
 }
 
 function payloadKey(payload: SpotifyResultsPayload): string {
@@ -266,6 +344,11 @@ export class SpotifyResultsView {
   }
 
   render(payload: unknown): Promise<void> {
+    const routeApproval = normalizeRouteApprovalPayload(payload);
+    if (routeApproval) {
+      this.#renderRouteApproval(routeApproval);
+      return Promise.resolve();
+    }
     const normalizedPayload = normalizeResultsPayload(payload);
     if (!normalizedPayload) return Promise.resolve();
     const nextPayloadKey = payloadKey(normalizedPayload);
@@ -278,6 +361,7 @@ export class SpotifyResultsView {
     this.#summary.textContent = `${normalizedPayload.items.length} result${normalizedPayload.items.length === 1 ? "" : "s"}`;
     this.#feedback.replaceChildren();
     this.#results.replaceChildren();
+    this.#results.className = "results";
     const isSingleCollection = normalizedPayload.items.length === 1
       && COLLECTION_KINDS.has(normalizedPayload.items[0]!.kind);
     this.#cards = normalizedPayload.items.map((item, index) =>
@@ -287,6 +371,111 @@ export class SpotifyResultsView {
     }
     this.#lastRender = this.#loadContext(revision);
     return this.#lastRender;
+  }
+
+  #renderRouteApproval(payload: RouteApprovalPayload): void {
+    const nextPayloadKey = JSON.stringify(payload);
+    if (nextPayloadKey === this.#lastPayloadKey) return;
+    this.#lastPayloadKey = nextPayloadKey;
+    ++this.#renderRevision;
+    this.#title.textContent = payload.title;
+    this.#summary.textContent = payload.summary;
+    this.#device.replaceChildren();
+    this.#feedback.replaceChildren();
+    this.#results.replaceChildren();
+    this.#results.className = "results route-approval";
+
+    for (const pin of payload.pins) {
+      const row = document.createElement("article");
+      row.className = "route-pin";
+      const order = document.createElement("span");
+      order.className = "route-pin-order";
+      order.textContent = String(pin.order);
+      row.appendChild(order);
+      const copy = document.createElement("div");
+      copy.className = "copy";
+      addText(copy, "name", pin.name);
+      addText(copy, "meta", pin.kind === "chapter" ? "Chapter stop" : "Navigation cue");
+      addText(copy, "reason", pin.note);
+      row.appendChild(copy);
+      if (pin.map_url) {
+        const link = document.createElement("a");
+        link.className = "open-link";
+        link.href = pin.map_url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Open pin";
+        link.setAttribute("aria-label", `Open ${pin.name} on the map`);
+        link.addEventListener("click", (event) => void this.#openExternal(event, pin.map_url!));
+        row.appendChild(link);
+      }
+      this.#results.appendChild(row);
+    }
+
+    const links = [payload.starting_point_url, ...payload.route_urls].filter(
+      (url): url is string => Boolean(url),
+    );
+    if (links.length) {
+      const maps = document.createElement("div");
+      maps.className = "route-links";
+      links.forEach((url, index) => {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = index === 0 && payload.starting_point_url ? "Starting point" : `Route map ${index + (payload.starting_point_url ? 0 : 1)}`;
+        link.addEventListener("click", (event) => void this.#openExternal(event, url));
+        maps.appendChild(link);
+      });
+      this.#results.appendChild(maps);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "route-approval-actions";
+    actions.appendChild(this.#responseButton(
+      "Approve route",
+      "I approve this route exactly as presented. Continue to the next required approval gate.",
+      "primary",
+    ));
+    actions.appendChild(this.#responseButton(
+      "Adjust pins",
+      "I need to adjust one or more route pins before approving this route.",
+      "secondary",
+    ));
+    this.#results.appendChild(actions);
+    if (this.#bridge.canSendMessage?.() === false) {
+      this.#setFeedback("Quick responses are unavailable in this host. Reply in chat instead.");
+    }
+  }
+
+  #responseButton(label: string, message: string, variant: string): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `route-action route-action-${variant}`;
+    button.textContent = label;
+    if (!this.#bridge.sendMessage || this.#bridge.canSendMessage?.() === false) {
+      button.disabled = true;
+      button.title = "Reply in chat because this host does not support app response messages.";
+    }
+    button.addEventListener("click", async () => {
+      if (!this.#bridge.sendMessage || this.#bridge.canSendMessage?.() === false) {
+        this.#setFeedback("This host cannot send the response. Reply in chat instead.", "error");
+        return;
+      }
+      const actionButtons = [
+        ...this.#results.querySelectorAll<HTMLButtonElement>(".route-action"),
+      ];
+      actionButtons.forEach((action) => { action.disabled = true; });
+      try {
+        const result = await this.#bridge.sendMessage(message);
+        if (result.isError) throw new Error("message rejected");
+        this.#setFeedback(`${label} response sent.`);
+      } catch {
+        actionButtons.forEach((action) => { action.disabled = false; });
+        this.#setFeedback("The response could not be sent. Reply in chat instead.", "error");
+      }
+    });
+    return button;
   }
 
   #renderCard(item: SpotifyResultItem, prominent: boolean, initiallyHidden: boolean): CardView {

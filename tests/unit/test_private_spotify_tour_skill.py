@@ -32,6 +32,15 @@ def test_tour_skill_keeps_route_content_and_production_boundaries() -> None:
     assert "exact `READY` gate" in text
 
 
+def test_tour_skill_requires_interactive_route_approval_actions() -> None:
+    text = _skill_text()
+
+    assert "`spotify_render_route_approval`" in text
+    assert '"Approve route"' in text
+    assert '"Adjust pins"' in text
+    assert "Do not leave the route-approval gate as a prose-only question" in text
+
+
 def test_tour_skill_requires_map_metadata_and_final_audio_timestamps() -> None:
     text = _skill_text()
 

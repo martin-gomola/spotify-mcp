@@ -26,8 +26,11 @@ Kokoro setup, content approvals, preview, upload, readiness, or playlist verific
    numbered route legs or a GPX/GeoJSON handoff instead of silently dropping stops. Use `mapy-com`
    when it offers a better outdoor, elevation, or waypoint handoff.
 5. Present the route, chapter candidates, navigation-only triggers, and map for explicit approval
-   before researching or scripting the episode. Research landmark facts independently from
-   credible sources; the discovered tour supplies route structure, not narration to copy.
+   before researching or scripting the episode. Call `spotify_render_route_approval` with every
+   ordered pin and all route links so the MCP App renders the "Approve route" and "Adjust pins"
+   response buttons. Do not leave the route-approval gate as a prose-only question. After the tool
+   call, stop until the user selects an action or replies explicitly. Research landmark facts
+   independently from credible sources; the discovered tour supplies route structure, not narration to copy.
 
 ## Prepare the podcast handoff
 

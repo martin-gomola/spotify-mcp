@@ -5,6 +5,7 @@ const appState = vi.hoisted(() => ({
   instances: [] as Array<{
     listeners: Map<string, (payload: Record<string, unknown>) => void>;
     callServerTool: ReturnType<typeof vi.fn>;
+    sendMessage: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -20,6 +21,11 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
         now_playing: { is_playing: false },
       },
     }));
+    sendMessage = vi.fn(async () => ({}));
+
+    getHostCapabilities(): Record<string, unknown> {
+      return { message: { text: {} } };
+    }
 
     constructor() {
       appState.instances.push(this);

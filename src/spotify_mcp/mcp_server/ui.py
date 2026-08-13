@@ -29,6 +29,13 @@ _RESULTS_ASSET = "resources/spotify-results-v1.html"
 _PLAYABLE_RESULT_TYPES = frozenset({"track", "album", "artist", "playlist"})
 
 
+def _validate_https_url(value: str, field_name: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError(f"{field_name} must be an absolute https URL without credentials")
+    return value
+
+
 def _spotify_entity_from_url(value: str) -> tuple[SpotifyEntityType, str]:
     parsed = urlsplit(value)
     parts = [part for part in parsed.path.split("/") if part]
@@ -123,6 +130,46 @@ class SpotifyResultsView(BaseModel):
     items: list[SpotifyResultCard] = Field(min_length=1, max_length=50)
 
 
+class RouteApprovalPin(BaseModel):
+    """One ordered route pin shown at the explicit tour approval gate."""
+
+    model_config = ConfigDict(frozen=True)
+
+    order: int = Field(ge=1, le=50)
+    name: str = Field(min_length=1, max_length=200)
+    kind: Literal["chapter", "navigation"]
+    note: str | None = Field(default=None, max_length=500)
+    map_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("map_url")
+    @classmethod
+    def validate_map_url(cls, value: str | None) -> str | None:
+        return _validate_https_url(value, "map_url") if value is not None else None
+
+
+class RouteApprovalView(BaseModel):
+    """Structured route preview with user-response actions rendered by the MCP App."""
+
+    model_config = ConfigDict(frozen=True)
+
+    view: Literal["route_approval"] = "route_approval"
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(min_length=1, max_length=1000)
+    pins: list[RouteApprovalPin] = Field(min_length=1, max_length=50)
+    starting_point_url: str | None = Field(default=None, max_length=2000)
+    route_urls: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("starting_point_url")
+    @classmethod
+    def validate_starting_point_url(cls, value: str | None) -> str | None:
+        return _validate_https_url(value, "starting_point_url") if value is not None else None
+
+    @field_validator("route_urls")
+    @classmethod
+    def validate_route_urls(cls, value: list[str]) -> list[str]:
+        return [_validate_https_url(url, "route_urls") for url in value]
+
+
 class SpotifyResultsContext(BaseModel):
     """Device and playback state needed by the inline results view."""
 
@@ -179,6 +226,39 @@ def create_results_apps() -> Apps:
     )
     async def render_results(title: str, items: list[SpotifyResultCard]) -> SpotifyResultsView:
         return SpotifyResultsView(title=title, items=items)
+
+    @apps.tool(
+        resource_uri=RESULTS_UI_URI,
+        visibility=("model",),
+        name="spotify_render_route_approval",
+        title="Show Spotify tour route approval",
+        description=(
+            "Render the final proposed walking-tour route at its required approval gate. "
+            "Use this instead of a prose-only approval question; the view supplies Approve route "
+            "and Adjust pins response buttons. Do not continue until the user responds."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=True,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=False,
+        ),
+        structured_output=True,
+    )
+    async def render_route_approval(
+        title: str,
+        summary: str,
+        pins: list[RouteApprovalPin],
+        starting_point_url: str | None = None,
+        route_urls: list[str] | None = None,
+    ) -> RouteApprovalView:
+        return RouteApprovalView(
+            title=title,
+            summary=summary,
+            pins=pins,
+            starting_point_url=starting_point_url,
+            route_urls=route_urls or [],
+        )
 
     @apps.tool(
         resource_uri=RESULTS_UI_URI,

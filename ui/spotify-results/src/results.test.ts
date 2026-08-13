@@ -79,10 +79,13 @@ function renderShell(): void {
 function bridgeWith(...results: ToolCallResult[]): ResultsBridge & {
   callServerTool: ReturnType<typeof vi.fn>;
   openLink: ReturnType<typeof vi.fn>;
+  sendMessage: ReturnType<typeof vi.fn>;
 } {
   return {
     callServerTool: vi.fn(async () => results.shift() ?? { isError: true }),
     openLink: vi.fn(async () => ({})),
+    sendMessage: vi.fn(async () => ({})),
+    canSendMessage: () => true,
   };
 }
 
@@ -102,6 +105,68 @@ beforeEach(() => {
 });
 
 describe("SpotifyResultsView", () => {
+  it("renders route approval quick actions and sends the selected response", async () => {
+    const bridge = bridgeWith();
+    await new SpotifyResultsView(bridge).render({
+      view: "route_approval",
+      title: "Approve the Bratislava route",
+      summary: "2 pins · 1.2 km · about 25 minutes",
+      pins: [
+        { order: 1, name: "Michael's Gate", kind: "chapter", map_url: "https://maps.google.com/?q=1" },
+        { order: 2, name: "Turn left", kind: "navigation", note: "Follow Venturska" },
+      ],
+      starting_point_url: "https://maps.google.com/?q=start",
+      route_urls: ["https://maps.google.com/?q=route"],
+    });
+
+    expect(document.querySelectorAll(".route-pin")).toHaveLength(2);
+    const actions = [...document.querySelectorAll<HTMLButtonElement>(".route-action")];
+    expect(actions.map((button) => button.textContent)).toEqual(["Approve route", "Adjust pins"]);
+    actions[0]!.click();
+    expect(actions.every((button) => button.disabled)).toBe(true);
+    await vi.waitFor(() => expect(bridge.sendMessage).toHaveBeenCalledWith(
+      "I approve this route exactly as presented. Continue to the next required approval gate.",
+    ));
+    expect(bridge.callServerTool).not.toHaveBeenCalled();
+  });
+
+  it("disables route actions when the host lacks ui/message support", async () => {
+    const bridge = bridgeWith();
+    bridge.canSendMessage = () => false;
+    await new SpotifyResultsView(bridge).render({
+      view: "route_approval",
+      title: "Approve route",
+      summary: "1 pin",
+      pins: [{ order: 1, name: "Start", kind: "chapter" }],
+      route_urls: [],
+    });
+
+    const actions = [...document.querySelectorAll<HTMLButtonElement>(".route-action")];
+    expect(actions.every((button) => button.disabled)).toBe(true);
+    expect(document.querySelector("#feedback")?.textContent).toContain("Reply in chat");
+  });
+
+  it("does not render route payloads with credential-bearing links", async () => {
+    const bridge = bridgeWith();
+    await new SpotifyResultsView(bridge).render({
+      view: "route_approval",
+      title: "Unsafe route",
+      summary: "1 pin",
+      pins: [
+        {
+          order: 1,
+          name: "Bad pin",
+          kind: "chapter",
+          map_url: "https://user:secret@127.0.0.1/route",
+        },
+      ],
+      route_urls: [],
+    });
+
+    expect(document.querySelectorAll(".route-pin")).toHaveLength(0);
+    expect(document.querySelectorAll(".route-action")).toHaveLength(0);
+  });
+
   it("normalizes raw Spotify search results before rendering controls", async () => {
     const bridge = bridgeWith(contextResult());
     await new SpotifyResultsView(bridge).render({

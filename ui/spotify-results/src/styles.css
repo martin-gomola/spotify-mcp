@@ -188,6 +188,71 @@ select {
   counter-reset: result;
 }
 
+.route-approval {
+  counter-reset: none;
+}
+
+.route-pin {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.route-pin-order {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.route-links,
+.route-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.route-links a {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.route-action {
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.route-action-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.route-action-secondary {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.route-action:disabled {
+  cursor: wait;
+  opacity: .5;
+}
+
 .card {
   position: relative;
   display: grid;
