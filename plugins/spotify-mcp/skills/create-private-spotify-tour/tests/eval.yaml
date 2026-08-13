@@ -1,0 +1,31 @@
+skill: create-private-spotify-tour
+cases:
+  - name: city_to_tour_pipeline
+    prompt: "Find a 30-minute walking tour in Bratislava and turn it into a chaptered private Spotify episode with a route map."
+    expectations:
+      - "Invokes find-tour to rank public route candidates, then passes the selected canonical URL to tour-path-extractor."
+      - "Builds a Google Maps starting-point link and faithful walking route without silently dropping verified stops."
+      - "Requires route approval before independent research, scripting, preview, or upload."
+      - "Delegates production to create-private-spotify-podcast and preserves all of its approval and readiness gates."
+  - name: supplied_tour_url_pipeline
+    prompt: "Use this VoiceMap URL as the route for my private Spotify travel guide."
+    expectations:
+      - "Skips find-tour because a source URL is already supplied and invokes tour-path-extractor directly."
+      - "Uses public route structure without copying or paraphrasing paid narration."
+      - "Creates exact final-audio timestamps for Spotify chapters or the timeline and duplicates them in show notes."
+  - name: waypoint_limit
+    prompt: "The approved route has 28 verified stops and one Google Maps URL cannot retain them all."
+    expectations:
+      - "Returns numbered Google Maps legs or a GPX/GeoJSON handoff instead of dropping stops."
+      - "Keeps the complete ordered route and discloses the map-provider limitation."
+  - name: text_podcast_boundary
+    prompt: "Turn this meeting transcript into a private Spotify podcast."
+    expectations:
+      - "Routes this request to create-private-spotify-podcast without tour discovery, route extraction, or mapping."
+  - name: tour_episode_metadata
+    prompt: "Format the finished Nice walking-tour episode for Spotify with chapters and useful show notes."
+    expectations:
+      - "Uses a clear City or Spot Name secret walking-tour title while keeping the duration truthful."
+      - "Includes a linked starting point, verified duration and distance, interactive route map, and timestamped stops."
+      - "Matches timestamps to the assembled audio rather than estimated script positions."
+threshold: { pass_rate: 1.0 }

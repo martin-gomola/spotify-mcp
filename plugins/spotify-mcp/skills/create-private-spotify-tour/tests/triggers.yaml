@@ -1,0 +1,13 @@
+skill: create-private-spotify-tour
+should_trigger:
+  - "Find a walking tour in Bratislava, map its route, and make it a private Spotify podcast"
+  - "Turn this VoiceMap tour URL into a chaptered private Spotify walking guide"
+  - "Create a 30-minute audio walking tour of Nice with tappable stops and a route map"
+  - "Make a private Spotify travel episode for Porto based on a public heritage trail"
+should_not_trigger:
+  - "Turn this PDF into a private podcast I can listen to on Spotify"
+  - "Extract the exact route from this VoiceMap URL without making audio"
+  - "Plan a walking day trip in Vienna"
+  - "Add an existing podcast episode to my playlist"
+  - "Create a Google Maps route from these coordinates"
+threshold: { min_tpr: 0.9, max_fpr: 0.1 }

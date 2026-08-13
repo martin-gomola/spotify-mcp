@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create a private Spotify walking tour"
+  short_description: "Turn a city route into private Spotify audio"
+  default_prompt: "Use $create-private-spotify-tour to find or extract a walking route, map it, and create a chaptered private Spotify episode."
