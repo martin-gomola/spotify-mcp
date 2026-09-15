@@ -9,7 +9,7 @@
     "typecheck:ui": "tsc --noEmit -p ui/spotify-results/tsconfig.json"
   },
   "devDependencies": {
-    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@types/node": "24.10.4",
     "jsdom": "30.0.1",
     "typescript": "7.0.2",
